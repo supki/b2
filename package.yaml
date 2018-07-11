@@ -1,0 +1,48 @@
+name: b2
+version: 1.0.0
+synopsis: b2
+description: See README.markdown
+category: Web
+maintainer: matvey.aksenov@gmail.com
+copyright: Matvey Aksenov 2018
+license: BSD2
+extra-source-files:
+  - README.markdown
+
+dependencies:
+  - base >= 4.7 && < 5
+
+default-extensions:
+  - OverloadedStrings
+
+library:
+  dependencies:
+    - aeson
+    - bytestring
+    - base64-bytestring
+    - http-conduit
+    - http-types
+    - text
+  source-dirs:
+    src
+  ghc-options:
+    - -funbox-strict-fields
+    - -Wall
+    - -Werror
+
+tests:
+  spec:
+    dependencies:
+      - aeson
+      - aeson-qq
+      - b2
+      - hspec
+    source-dirs:
+      test
+    main:
+      Spec.hs
+    ghc-options:
+      - -Wall
+      - -Werror
+      - -threaded
+      - -with-rtsopts=-N
