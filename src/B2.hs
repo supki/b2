@@ -9,10 +9,12 @@ module B2
   , module B2.AuthorizationToken
   , module B2.BaseUrl
   , module B2.Bucket
+  , module B2.Key
   , module B2
   ) where
 
 import           Control.Exception (Exception, throwIO)
+import           Control.Monad (join)
 import           Data.Aeson ((.:))
 import qualified Data.Aeson as Aeson
 import           Data.Aeson.QQ (aesonQQ)
@@ -30,6 +32,7 @@ import           B2.AccountID
 import           B2.AuthorizationToken
 import           B2.BaseUrl
 import           B2.Bucket
+import           B2.Key
 
 
 newtype KeyID = KeyID { unKeyID :: Text }
@@ -61,7 +64,7 @@ instance Aeson.FromJSON AuthorizeAccount where
       pure AuthorizeAccount {..}
 
 data Allowed = Allowed
-  { capabilities :: [Text]
+  { capabilities :: [Capability]
   , bucketID     :: Maybe BucketID
   , namePrefix   :: Maybe Text
   } deriving (Show, Eq)
@@ -153,10 +156,10 @@ b2_create_bucket env name type_ info cors lifecycle man = do
 
 b2_list_buckets
   :: ( Aeson.FromJSON info
+     , HasBucketID bucketID
      , HasBaseUrl env
      , HasAccountID env
      , HasAuthorizationToken env
-     , HasBucketID bucketID
      )
   => env
   -> Maybe bucketID
@@ -180,10 +183,10 @@ b2_list_buckets env id name types man = do
 
 b2_delete_bucket
   :: ( Aeson.FromJSON info
+     , HasBucketID bucketID
      , HasBaseUrl env
      , HasAccountID env
      , HasAuthorizationToken env
-     , HasBucketID bucketID
      )
   => env
   -> bucketID
@@ -196,6 +199,58 @@ b2_delete_bucket env id man = do
     , Http.requestBody=Http.RequestBodyLBS (Aeson.encode [aesonQQ|
         { accountId: #{getAccountID env}
         , bucketId: #{getBucketID id}
+        }
+      |])
+    } man
+  parseResponse res
+
+b2_create_key
+  :: ( HasBucketID bucketID
+     , HasBaseUrl env
+     , HasAccountID env
+     , HasAuthorizationToken env
+     )
+  => env
+  -> [Text]
+  -> Text
+  -> Int64
+  -> Maybe (bucketID, Maybe Text)
+  -> Http.Manager
+  -> IO (Either Error Key)
+b2_create_key env capabilities name durationS restrictions man = do
+  req <- generateRequest env "/b2api/v1/b2_create_key"
+  res <- Http.httpLbs req
+    { Http.requestHeaders=[authorization env]
+    , Http.requestBody=Http.RequestBodyLBS (Aeson.encode [aesonQQ|
+        { accountId: #{getAccountID env}
+        , capabilities: #{capabilities}
+        , keyName: #{name}
+        , validDurationInSeconds: #{durationS}
+        , bucketId: #{fmap (getBucketID . fst) restrictions}
+        , namePrefix: #{join (fmap snd restrictions)}
+        }
+      |])
+    } man
+  parseResponse res
+
+b2_list_keys
+  :: ( HasBaseUrl env
+     , HasAccountID env
+     , HasAuthorizationToken env
+     )
+  => env
+  -> Maybe Int64
+  -> Maybe Text
+  -> Http.Manager
+  -> IO (Either Error Keys)
+b2_list_keys env maxKeyCount startApplicationKeyID man = do
+  req <- generateRequest env "/b2api/v1/b2_list_keys"
+  res <- Http.httpLbs req
+    { Http.requestHeaders=[authorization env]
+    , Http.requestBody=Http.RequestBodyLBS (Aeson.encode [aesonQQ|
+        { accountId: #{getAccountID env}
+        , maxKeyCount: #{maxKeyCount}
+        , startApplicationKeyId: #{startApplicationKeyID}
         }
       |])
     } man

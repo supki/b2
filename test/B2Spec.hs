@@ -102,3 +102,11 @@ spec = parallel $ do
             , revision=4
             }
           ])
+
+  describe "b2_create_key" $
+    it "parses success response" $
+      pendingWith "Not implemented by B2"
+
+  describe "b2_list_keys" $
+    it "parses success response" $
+      pendingWith "Not implemented by B2"
