@@ -4,6 +4,7 @@ module B2Spec (spec) where
 
 import           Data.Aeson.QQ (aesonQQ)
 import qualified Data.Aeson as Aeson
+import qualified Data.HashMap.Strict as HashMap
 import           Prelude hiding (all)
 import           Test.Hspec
 
@@ -186,12 +187,40 @@ spec = parallel $ do
   describe "b2_get_upload_url" $
     it "parses success response" $ do
       Aeson.decode (Aeson.encode ([aesonQQ|
-        { "authorizationToken": "..."
-        , "bucketId": "041fc46015ee80d2684a0715"
-        , "uploadUrl": "https://pod-....backblaze.com/b2api/v1/b2_upload_file/..."
+        { authorizationToken: "..."
+        , bucketId: "041fc46015ee80d2684a0715"
+        , uploadUrl: "https://pod-....backblaze.com/b2api/v1/b2_upload_file/..."
         }
       |])) `shouldBe` pure UploadInfo
         { bucketID="041fc46015ee80d2684a0715"
         , uploadUrl="https://pod-....backblaze.com/b2api/v1/b2_upload_file/..."
         , authorizationToken="..."
+        }
+
+  describe "b2_upload_file" $
+    it "parses success response" $ do
+      Aeson.decode (Aeson.encode ([aesonQQ|
+        { accountId: "..."
+        , action: "upload"
+        , bucketId: "041fc46015ee80d2684a0715"
+        , contentLength: 13293
+        , contentSha1: "unverified:5b13b936d24e0ea47940e84d3021866a05887688"
+        , contentType: "text/plain"
+        , fileId: "..."
+        , fileInfo:
+          { test: "value"
+          }
+        , fileName: ".vimrc"
+        , uploadTimestamp: 1531422158000
+        }
+      |])) `shouldBe` pure File
+        { accountID="..."
+        , bucketID="041fc46015ee80d2684a0715"
+        , contentLength=13293
+        , contentSha1="unverified:5b13b936d24e0ea47940e84d3021866a05887688"
+        , contentType="text/plain"
+        , fileID="..."
+        , fileInfo=HashMap.singleton "test" "value"
+        , fileName=".vimrc"
+        , uploadTimestamp=1531422158000
         }

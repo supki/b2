@@ -9,6 +9,7 @@ module B2
   , module B2.AuthorizationToken
   , module B2.BaseUrl
   , module B2.Bucket
+  , module B2.File
   , module B2.Key
   , module B2.Upload
   , module B2
@@ -19,6 +20,7 @@ import           Control.Monad (join)
 import           Data.Aeson ((.:))
 import qualified Data.Aeson as Aeson
 import           Data.Aeson.QQ (aesonQQ)
+import           Data.Bifunctor (bimap)
 import qualified Data.ByteString.Lazy as Lazy (ByteString)
 import           Data.Int (Int64)
 import           Data.Monoid ((<>))
@@ -32,6 +34,7 @@ import           B2.AccountID
 import           B2.AuthorizationToken
 import           B2.BaseUrl
 import           B2.Bucket
+import           B2.File
 import           B2.Key
 import           B2.Upload
 
@@ -108,15 +111,12 @@ b2_authorize_account
   -> ApplicationKey
   -> Http.Manager
   -> IO (Either Error AuthorizeAccount)
-b2_authorize_account url KeyID {unKeyID} ApplicationKey {unApplicationKey} man = do
-  req <- generateRequest url "/b2api/v1/b2_authorize_account"
-  res <- Http.httpLbs ((applyAuth req)
+b2_authorize_account url keyID applicationKey man = do
+  req <- generateBasicRequest url keyID applicationKey "/b2api/v1/b2_authorize_account"
+  res <- Http.httpLbs req
     { Http.requestBody=Http.RequestBodyLBS "{}"
-    }) man
+    } man
   parseResponse res
- where
-  applyAuth =
-    Http.applyBasicAuth (Text.encodeUtf8 unKeyID) (Text.encodeUtf8 unApplicationKey)
 
 b2_create_bucket
   :: ( Aeson.FromJSON info
@@ -134,10 +134,9 @@ b2_create_bucket
   -> Http.Manager
   -> IO (Either Error (Bucket info))
 b2_create_bucket env name type_ info cors lifecycle man = do
-  req <- generateRequest env "/b2api/v1/b2_create_bucket"
+  req <- generateTokenRequest env "/b2api/v1/b2_create_bucket"
   res <- Http.httpLbs req
-    { Http.requestHeaders=[authorization env]
-    , Http.requestBody=Http.RequestBodyLBS (Aeson.encode [aesonQQ|
+    { Http.requestBody=Http.RequestBodyLBS (Aeson.encode [aesonQQ|
         { accountId: #{getAccountID env}
         , bucketName: #{name}
         , bucketType: #{type_}
@@ -163,10 +162,9 @@ b2_list_buckets
   -> Http.Manager
   -> IO (Either Error [Bucket info])
 b2_list_buckets env id name types man = do
-  req <- generateRequest env "/b2api/v1/b2_list_buckets"
+  req <- generateTokenRequest env "/b2api/v1/b2_list_buckets"
   res <- Http.httpLbs req
-    { Http.requestHeaders=[authorization env]
-    , Http.requestBody=Http.RequestBodyLBS (Aeson.encode [aesonQQ|
+    { Http.requestBody=Http.RequestBodyLBS (Aeson.encode [aesonQQ|
         { accountId: #{getAccountID env}
         , bucketId: #{fmap getBucketID id}
         , bucketName: #{name}
@@ -188,10 +186,9 @@ b2_delete_bucket
   -> Http.Manager
   -> IO (Either Error (Bucket info))
 b2_delete_bucket env id man = do
-  req <- generateRequest env "/b2api/v1/b2_delete_bucket"
+  req <- generateTokenRequest env "/b2api/v1/b2_delete_bucket"
   res <- Http.httpLbs req
-    { Http.requestHeaders=[authorization env]
-    , Http.requestBody=Http.RequestBodyLBS (Aeson.encode [aesonQQ|
+    { Http.requestBody=Http.RequestBodyLBS (Aeson.encode [aesonQQ|
         { accountId: #{getAccountID env}
         , bucketId: #{getBucketID id}
         }
@@ -213,10 +210,9 @@ b2_create_key
   -> Http.Manager
   -> IO (Either Error (Key ApplicationKey))
 b2_create_key env capabilities name durationS restrictions man = do
-  req <- generateRequest env "/b2api/v1/b2_create_key"
+  req <- generateTokenRequest env "/b2api/v1/b2_create_key"
   res <- Http.httpLbs req
-    { Http.requestHeaders=[authorization env]
-    , Http.requestBody=Http.RequestBodyLBS (Aeson.encode [aesonQQ|
+    { Http.requestBody=Http.RequestBodyLBS (Aeson.encode [aesonQQ|
         { accountId: #{getAccountID env}
         , capabilities: #{capabilities}
         , keyName: #{name}
@@ -239,10 +235,9 @@ b2_list_keys
   -> Http.Manager
   -> IO (Either Error Keys)
 b2_list_keys env maxKeyCount startApplicationKeyID man = do
-  req <- generateRequest env "/b2api/v1/b2_list_keys"
+  req <- generateTokenRequest env "/b2api/v1/b2_list_keys"
   res <- Http.httpLbs req
-    { Http.requestHeaders=[authorization env]
-    , Http.requestBody=Http.RequestBodyLBS (Aeson.encode [aesonQQ|
+    { Http.requestBody=Http.RequestBodyLBS (Aeson.encode [aesonQQ|
         { accountId: #{getAccountID env}
         , maxKeyCount: #{maxKeyCount}
         , startApplicationKeyId: #{startApplicationKeyID}
@@ -261,10 +256,9 @@ b2_delete_key
   -> Http.Manager
   -> IO (Either Error (Key NoSecret))
 b2_delete_key env id man = do
-  req <- generateRequest env "/b2api/v1/b2_delete_key"
+  req <- generateTokenRequest env "/b2api/v1/b2_delete_key"
   res <- Http.httpLbs req
-    { Http.requestHeaders=[authorization env]
-    , Http.requestBody=Http.RequestBodyLBS (Aeson.encode [aesonQQ|
+    { Http.requestBody=Http.RequestBodyLBS (Aeson.encode [aesonQQ|
         { applicationKeyId: #{getKeyID id}
         }
       |])
@@ -281,15 +275,59 @@ b2_get_upload_url
   -> Http.Manager
   -> IO (Either Error UploadInfo)
 b2_get_upload_url env id man = do
-  req <- generateRequest env "/b2api/v1/b2_get_upload_url"
+  req <- generateTokenRequest env "/b2api/v1/b2_get_upload_url"
   res <- Http.httpLbs req
-    { Http.requestHeaders=[authorization env]
-    , Http.requestBody=Http.RequestBodyLBS (Aeson.encode [aesonQQ|
+    { Http.requestBody=Http.RequestBodyLBS (Aeson.encode [aesonQQ|
         { bucketId: #{getBucketID id}
         }
       |])
     } man
   parseResponse res
+
+b2_upload_file
+  :: ( HasUploadUrl env
+     , HasAuthorizationToken env
+     )
+  => env
+  -> Text
+  -> Maybe Text
+  -> Lazy.ByteString
+  -> [(Http.HeaderName, Text)]
+  -> Http.Manager
+  -> IO (Either Error File)
+b2_upload_file env name contentType content info man = do
+  req <- generateUploadRequest env name contentType info
+  res <- Http.httpLbs req
+    { Http.requestBody=Http.RequestBodyLBS content
+    } man
+  parseResponse res
+
+generateBasicRequest
+  :: HasBaseUrl env
+  => env
+  -> KeyID
+  -> ApplicationKey
+  -> String
+  -> IO Http.Request
+generateBasicRequest env KeyID {unKeyID} ApplicationKey {unApplicationKey} method = do
+  req <- generateRequest env method
+  pure (applyAuth req)
+ where
+  applyAuth =
+    Http.applyBasicAuth (Text.encodeUtf8 unKeyID) (Text.encodeUtf8 unApplicationKey)
+
+generateTokenRequest
+  :: ( HasBaseUrl env
+     , HasAuthorizationToken env
+     )
+  => env
+  -> String
+  -> IO Http.Request
+generateTokenRequest env method = do
+  req <- generateRequest env method
+  pure req
+    { Http.requestHeaders=authorization env : Http.requestHeaders req
+    }
 
 generateRequest :: HasBaseUrl env => env -> String -> IO Http.Request
 generateRequest url method = do
@@ -297,6 +335,29 @@ generateRequest url method = do
   pure req
     { Http.method="POST"
     }
+
+generateUploadRequest
+  :: (HasUploadUrl env, HasAuthorizationToken env)
+  => env
+  -> Text
+  -> Maybe Text
+  -> [(Http.HeaderName, Text)]
+  -> IO Http.Request
+generateUploadRequest env name contentType info = do
+  req <- Http.parseRequest (unUploadUrl (getUploadUrl env))
+  pure req
+    { Http.method="POST"
+    , Http.requestHeaders=
+      ( authorization env
+      : ("X-Bz-File-Name", urlEncode (Text.encodeUtf8 name))
+      : ("Content-Type", maybe "b2/x-auto" Text.encodeUtf8 contentType)
+      : ("X-Bz-Content-Sha1", "do_not_verify")
+      : map (bimap ("X-Bz-Info-" <>) (urlEncode . Text.encodeUtf8)) info
+      )
+    }
+ where
+  urlEncode =
+    Http.urlEncode True
 
 parseResponse
   :: (Aeson.FromJSON err, Aeson.FromJSON a)
