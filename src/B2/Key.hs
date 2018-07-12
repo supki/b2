@@ -1,8 +1,14 @@
 {-# LANGUAGE DuplicateRecordFields #-}
+{-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE StrictData #-}
 module B2.Key
   ( Key(..)
+  , KeyID(..)
+  , HasKeyID(..)
+  , ApplicationKey(..)
+  , NoSecret(..)
   , Capability(..)
   , all
   , listKeys
@@ -30,18 +36,18 @@ import           B2.AccountID (AccountID)
 import           B2.Bucket (BucketID)
 
 
-data Key = Key
-  { applicationKeyID      :: Text
-  , applicationKey        :: Text
+data Key secret = Key
+  { applicationKeyID      :: KeyID
+  , applicationKey        :: secret
   , capabilities          :: [Capability]
   , accountID             :: AccountID
   , bucketID              :: Maybe BucketID
-  , expirationTimestampMS :: Int64
+  , expirationTimestampMS :: Maybe Int64
   , keyName               :: Text
   , namePrefix            :: Maybe Text
   } deriving (Show, Eq)
 
-instance Aeson.FromJSON Key where
+instance Aeson.FromJSON (Key ApplicationKey) where
   parseJSON =
     Aeson.withObject "Key" $ \o -> do
       applicationKeyID <- o .: "applicationKeyId"
@@ -53,6 +59,36 @@ instance Aeson.FromJSON Key where
       keyName <- o .: "keyName"
       namePrefix <- o .: "namePrefix"
       pure Key {..}
+
+instance Aeson.FromJSON (Key NoSecret) where
+  parseJSON =
+    Aeson.withObject "Key" $ \o -> do
+      applicationKeyID <- o .: "applicationKeyId"
+      capabilities <- o .: "capabilities"
+      accountID <- o .: "accountId"
+      bucketID <- o .: "bucketId"
+      expirationTimestampMS <- o .: "expirationTimestamp"
+      keyName <- o .: "keyName"
+      namePrefix <- o .: "namePrefix"
+      pure Key {applicationKey=NoSecret, ..}
+
+newtype KeyID = KeyID { unKeyID :: Text }
+    deriving (Show, Eq, IsString, Aeson.FromJSON, Aeson.ToJSON)
+
+class HasKeyID t where
+  getKeyID :: t -> KeyID
+
+instance HasKeyID KeyID where
+  getKeyID x = x
+
+instance HasKeyID (Key secret) where
+  getKeyID = applicationKeyID
+
+newtype ApplicationKey = ApplicationKey { unApplicationKey :: Text }
+    deriving (Show, Eq, IsString, Aeson.FromJSON)
+
+data NoSecret = NoSecret
+    deriving (Show, Eq)
 
 newtype Capability = Capability { unCapability :: Text }
     deriving (Show, Eq, IsString, Aeson.FromJSON)
@@ -78,8 +114,8 @@ writeFiles = "writeFiles"
 deleteFiles = "deleteFiles"
 
 data Keys = Keys
-  { keys :: [Key]
-  , nextApplicationKeyID :: Maybe Text
+  { keys                 :: [Key NoSecret]
+  , nextApplicationKeyID :: Maybe KeyID
   } deriving (Show, Eq)
 
 instance Aeson.FromJSON Keys where

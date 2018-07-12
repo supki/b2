@@ -4,6 +4,7 @@ module B2Spec (spec) where
 
 import           Data.Aeson.QQ (aesonQQ)
 import qualified Data.Aeson as Aeson
+import           Prelude hiding (all)
 import           Test.Hspec
 
 import           B2
@@ -104,9 +105,93 @@ spec = parallel $ do
           ])
 
   describe "b2_create_key" $
-    it "parses success response" $
+    it "parses success response" $ do
+      Aeson.decode (Aeson.encode ([aesonQQ|
+        { accountId: "..."
+        , applicationKeyId: "01020304"
+        , applicationKey: "secret"
+        , capabilities: ["all"]
+        , bucketId: null
+        , expirationTimestamp: null
+        , keyName: "key01"
+        , namePrefix: null
+        }
+      |])) `shouldBe` pure Key
+        { applicationKeyID="01020304"
+        , applicationKey="secret" :: ApplicationKey
+        , capabilities=[all]
+        , accountID="..."
+        , bucketID=Nothing
+        , expirationTimestampMS=Nothing
+        , keyName="key01"
+        , namePrefix=Nothing
+        }
       pendingWith "Not implemented by B2"
 
   describe "b2_list_keys" $
-    it "parses success response" $
+    it "parses success response" $ do
+      Aeson.decode (Aeson.encode ([aesonQQ|
+        { keys:
+          [ { accountId: "..."
+            , applicationKeyId: "01020304"
+            , capabilities: ["all"]
+            , bucketId: null
+            , expirationTimestamp: null
+            , keyName: "key01"
+            , namePrefix: null
+            }
+          ]
+        , nextApplicationKeyId: "01020305"
+        }
+      |])) `shouldBe` pure Keys
+        { keys=
+          [ Key
+            { applicationKeyID="01020304"
+            , applicationKey=NoSecret
+            , capabilities=[all]
+            , accountID="..."
+            , bucketID=Nothing
+            , expirationTimestampMS=Nothing
+            , keyName="key01"
+            , namePrefix=Nothing
+            }
+          ]
+        , nextApplicationKeyID=pure "01020305"
+        }
       pendingWith "Not implemented by B2"
+
+  describe "b2_delete_key" $
+    it "parses success response" $ do
+      Aeson.decode (Aeson.encode ([aesonQQ|
+        { accountId: "..."
+        , applicationKeyId: "01020304"
+        , capabilities: ["all"]
+        , bucketId: null
+        , expirationTimestamp: null
+        , keyName: "key01"
+        , namePrefix: null
+        }
+      |])) `shouldBe` pure Key
+        { applicationKeyID="01020304"
+        , applicationKey=NoSecret
+        , capabilities=[all]
+        , accountID="..."
+        , bucketID=Nothing
+        , expirationTimestampMS=Nothing
+        , keyName="key01"
+        , namePrefix=Nothing
+        }
+      pendingWith "Not implemented by B2"
+
+  describe "b2_get_upload_url" $
+    it "parses success response" $ do
+      Aeson.decode (Aeson.encode ([aesonQQ|
+        { "authorizationToken": "..."
+        , "bucketId": "041fc46015ee80d2684a0715"
+        , "uploadUrl": "https://pod-....backblaze.com/b2api/v1/b2_upload_file/..."
+        }
+      |])) `shouldBe` pure UploadInfo
+        { bucketID="041fc46015ee80d2684a0715"
+        , uploadUrl="https://pod-....backblaze.com/b2api/v1/b2_upload_file/..."
+        , authorizationToken="..."
+        }
