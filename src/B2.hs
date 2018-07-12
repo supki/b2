@@ -22,6 +22,7 @@ import           Data.Monoid ((<>))
 import           Data.String (IsString)
 import           Data.Text (Text)
 import qualified Data.Text.Encoding as Text
+import           Prelude hiding (id)
 import qualified Network.HTTP.Conduit as Http
 import qualified Network.HTTP.Types as Http
 
@@ -40,6 +41,7 @@ newtype ApplicationKey = ApplicationKey { unApplicationKey :: Text }
 data AuthorizeAccount = AuthorizeAccount
   { accountID               :: AccountID
   , authorizationToken      :: AuthorizationToken
+  , allowed                 :: Allowed
   , apiUrl                  :: BaseUrl
   , downloadUrl             :: Text
   , recommendedPartSize     :: Int64
@@ -51,11 +53,26 @@ instance Aeson.FromJSON AuthorizeAccount where
     Aeson.withObject "AuthorizeAccount" $ \o -> do
       accountID <- o .: "accountId"
       authorizationToken <- o .: "authorizationToken"
+      allowed <- o .: "allowed"
       apiUrl <- o .: "apiUrl"
       downloadUrl <- o .: "downloadUrl"
       recommendedPartSize <- o .: "recommendedPartSize"
       absoluteMinimumPartSize <- o .: "absoluteMinimumPartSize"
       pure AuthorizeAccount {..}
+
+data Allowed = Allowed
+  { capabilities :: [Text]
+  , bucketID     :: Maybe BucketID
+  , namePrefix   :: Maybe Text
+  } deriving (Show, Eq)
+
+instance Aeson.FromJSON Allowed where
+  parseJSON =
+    Aeson.withObject "Allowed" $ \o -> do
+      capabilities <- o .: "capabilities"
+      bucketID <- o .: "bucketId"
+      namePrefix <- o .: "namePrefix"
+      pure Allowed {..}
 
 instance HasAccountID AuthorizeAccount where
   getAccountID AuthorizeAccount {..} = accountID
@@ -95,7 +112,9 @@ b2_authorize_account
   -> IO (Either Error AuthorizeAccount)
 b2_authorize_account url KeyID {unKeyID} ApplicationKey {unApplicationKey} man = do
   req <- generateRequest url "/b2api/v1/b2_authorize_account"
-  res <- Http.httpLbs (applyAuth req) man
+  res <- Http.httpLbs ((applyAuth req)
+    { Http.requestBody=Http.RequestBodyLBS "{}"
+    }) man
   parseResponse res
  where
   applyAuth =
@@ -119,8 +138,7 @@ b2_create_bucket
 b2_create_bucket env name type_ info cors lifecycle man = do
   req <- generateRequest env "/b2api/v1/b2_create_bucket"
   res <- Http.httpLbs req
-    { Http.method="POST"
-    , Http.requestHeaders=[authorization env]
+    { Http.requestHeaders=[authorization env]
     , Http.requestBody=Http.RequestBodyLBS (Aeson.encode [aesonQQ|
         { accountId: #{getAccountID env}
         , bucketName: #{name}
@@ -133,9 +151,35 @@ b2_create_bucket env name type_ info cors lifecycle man = do
     } man
   parseResponse res
 
+b2_list_buckets
+  :: ( Aeson.FromJSON info
+     , HasBaseUrl env
+     , HasAccountID env
+     , HasAuthorizationToken env
+     , HasBucketID bucketID
+     )
+  => env
+  -> Maybe bucketID
+  -> Maybe Text
+  -> Maybe [BucketType]
+  -> Http.Manager
+  -> IO (Either Error [Bucket info])
+b2_list_buckets env id name types man = do
+  req <- generateRequest env "/b2api/v1/b2_list_buckets"
+  res <- Http.httpLbs req
+    { Http.requestHeaders=[authorization env]
+    , Http.requestBody=Http.RequestBodyLBS (Aeson.encode [aesonQQ|
+        { accountId: #{getAccountID env}
+        , bucketId: #{fmap getBucketID id}
+        , bucketName: #{name}
+        , bucketTypes: #{types}
+        }
+      |])
+    } man
+  fmap (fmap unBuckets) (parseResponse res)
+
 b2_delete_bucket
   :: ( Aeson.FromJSON info
-     , Aeson.ToJSON info
      , HasBaseUrl env
      , HasAccountID env
      , HasAuthorizationToken env
@@ -148,8 +192,7 @@ b2_delete_bucket
 b2_delete_bucket env id man = do
   req <- generateRequest env "/b2api/v1/b2_delete_bucket"
   res <- Http.httpLbs req
-    { Http.method="POST"
-    , Http.requestHeaders=[authorization env]
+    { Http.requestHeaders=[authorization env]
     , Http.requestBody=Http.RequestBodyLBS (Aeson.encode [aesonQQ|
         { accountId: #{getAccountID env}
         , bucketId: #{getBucketID id}
@@ -159,8 +202,11 @@ b2_delete_bucket env id man = do
   parseResponse res
 
 generateRequest :: HasBaseUrl env => env -> String -> IO Http.Request
-generateRequest url method =
-  Http.parseRequest (unBaseUrl (getBaseUrl url) <> method)
+generateRequest url method = do
+  req <- Http.parseRequest (unBaseUrl (getBaseUrl url) <> method)
+  pure req
+    { Http.method="POST"
+    }
 
 parseResponse
   :: (Aeson.FromJSON err, Aeson.FromJSON a)
@@ -180,7 +226,4 @@ parseJsonEx bytes =
 
 authorization :: HasAuthorizationToken env => env -> Http.Header
 authorization env =
-  ("Authorization", value)
- where
-  value =
-    Text.encodeUtf8 (unAuthorizationToken (getAuthorizationToken env))
+  ("Authorization", Text.encodeUtf8 (unAuthorizationToken (getAuthorizationToken env)))

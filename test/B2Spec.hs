@@ -42,6 +42,11 @@ spec = parallel $ do
       |])) `shouldBe` pure AuthorizeAccount
         { accountID="..."
         , authorizationToken="..."
+        , allowed=Allowed
+          { bucketID=Nothing
+          , capabilities=["all"]
+          , namePrefix=Nothing
+          }
         , apiUrl="https://api002.backblazeb2.com"
         , downloadUrl="https://f002.backblazeb2.com"
         , recommendedPartSize=100000000
@@ -69,3 +74,31 @@ spec = parallel $ do
         , lifecycleRules=[]
         , revision=4
         }
+
+  describe "b2_list_buckets" $
+    it "parses success response" $
+      Aeson.decode (Aeson.encode ([aesonQQ|
+        { buckets:
+          [ { accountId: "..."
+            , bucketId: "843f1470e5fe80a2684a0715"
+            , bucketInfo: {}
+            , bucketName: "bucket01"
+            , bucketType: "allPrivate"
+            , corsRules: []
+            , lifecycleRules: []
+            , revision: 4
+            }
+          ]
+        }
+      |])) `shouldBe` pure
+        (Buckets
+          [ Bucket
+            { accountID="..."
+            , bucketID="843f1470e5fe80a2684a0715"
+            , bucketInfo=Aeson.Object mempty
+            , bucketName="bucket01"
+            , bucketType=AllPrivate
+            , lifecycleRules=[]
+            , revision=4
+            }
+          ])

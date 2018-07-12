@@ -9,6 +9,7 @@ module B2.Bucket
   , BucketType(..)
   , LifecycleRule(..)
   , CorsRule(..)
+  , Buckets(..)
   ) where
 
 import           Control.Applicative (empty)
@@ -57,12 +58,14 @@ instance HasBucketID (Bucket info) where
 data BucketType
   = AllPrivate
   | AllPublic
+  | Snapshot
     deriving (Show, Eq)
 
 instance Aeson.ToJSON BucketType where
   toJSON = \case
     AllPrivate -> "allPrivate"
     AllPublic -> "allPublic"
+    Snapshot -> "snapshot"
 
 instance Aeson.FromJSON BucketType where
   parseJSON =
@@ -71,6 +74,8 @@ instance Aeson.FromJSON BucketType where
         pure AllPrivate
       "allPublic" ->
         pure AllPublic
+      "snapshot" ->
+        pure Snapshot
       _ ->
         empty
 
@@ -115,3 +120,12 @@ instance Aeson.ToJSON CorsRule where
       , "exposeHeaders" .= exposeHeaders
       , "maxAgeSecods" .= maxAgeSecods
       ]
+
+newtype Buckets info = Buckets { unBuckets :: [Bucket info] }
+    deriving (Show, Eq)
+
+instance Aeson.FromJSON info => Aeson.FromJSON (Buckets info) where
+  parseJSON =
+    Aeson.withObject "Buckets" $ \o -> do
+      unBuckets <- o .: "buckets"
+      pure Buckets {..}
