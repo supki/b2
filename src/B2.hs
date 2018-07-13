@@ -324,6 +324,25 @@ b2_delete_file_version env id name man = do
     } man
   parseResponse res
 
+b2_get_file_info
+  :: ( HasFileID fileID
+     , HasBaseUrl env
+     , HasAuthorizationToken env
+     )
+  => env
+  -> fileID
+  -> Http.Manager
+  -> IO (Either Error File)
+b2_get_file_info env id man = do
+  req <- generateTokenRequest env "/b2api/v1/b2_get_file_info"
+  res <- Http.httpLbs req
+    { Http.requestBody=Http.RequestBodyLBS (Aeson.encode [aesonQQ|
+        { fileId: #{getFileID id}
+        }
+      |])
+    } man
+  parseResponse res
+
 generateBasicRequest
   :: HasBaseUrl env
   => env
