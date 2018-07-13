@@ -9,23 +9,19 @@ module B2.File
   , HasFileID(..)
   , FileName(..)
   , HasFileName(..)
+  , Files(..)
   ) where
 
-import           Data.Aeson ((.:))
+import           Data.Aeson ((.:), (.:?))
 import qualified Data.Aeson as Aeson
 import           Data.Int (Int64)
 import           Data.HashMap.Strict (HashMap)
 import           Data.String (IsString)
 import           Data.Text (Text)
 
-import           B2.AccountID (AccountID)
-import           B2.Bucket (BucketID)
-
 
 data File = File
   { fileIDs         :: FileIDs
-  , accountID       :: AccountID
-  , bucketID        :: BucketID
   , contentLength   :: Int64
   , contentSha1     :: Text
   , contentType     :: Text
@@ -38,8 +34,6 @@ instance Aeson.FromJSON File where
   parseJSON =
     Aeson.withObject "File" $ \o -> do
       fileIDs <- Aeson.parseJSON (Aeson.Object o)
-      accountID <- o .: "accountId"
-      bucketID <- o .: "bucketId"
       contentLength <- o .: "contentLength"
       contentSha1 <- o .: "contentSha1"
       contentType <- o .: "contentType"
@@ -89,3 +83,17 @@ instance HasFileName FileIDs where
 
 instance HasFileName File where
   getFileName = getFileName . fileIDs
+
+data Files = Files
+  { files        :: [File]
+  , nextFileName :: Maybe Text
+  , nextFileId   :: Maybe FileID
+  } deriving (Show, Eq)
+
+instance Aeson.FromJSON Files where
+  parseJSON =
+    Aeson.withObject "Files" $ \o -> do
+      files <- o .: "files"
+      nextFileName <- o .: "nextFileName"
+      nextFileId <- o .:? "nextFileId"
+      pure Files {..}

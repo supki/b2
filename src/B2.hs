@@ -343,6 +343,63 @@ b2_get_file_info env id man = do
     } man
   parseResponse res
 
+b2_list_file_names
+  :: ( HasBucketID bucketID
+     , HasBaseUrl env
+     , HasAuthorizationToken env
+     )
+  => env
+  -> bucketID
+  -> Maybe Text
+  -> Maybe Int64
+  -> Maybe Text
+  -> Maybe Text
+  -> Http.Manager
+  -> IO (Either Error Files)
+b2_list_file_names env id startName maxCount prefix delimiter man = do
+  req <- generateTokenRequest env "/b2api/v1/b2_list_file_names"
+  res <- Http.httpLbs req
+    { Http.requestBody=Http.RequestBodyLBS (Aeson.encode [aesonQQ|
+        { bucketId: #{getBucketID id}
+        , startFileName: #{startName}
+        , maxFileCount: #{maxCount}
+        , prefix: #{prefix}
+        , delimiter: #{delimiter}
+        }
+      |])
+    } man
+  parseResponse res
+
+b2_list_file_versions
+  :: ( HasBucketID bucketID
+     , HasFileID fileID
+     , Aeson.ToJSON fileID
+     , HasBaseUrl env
+     , HasAuthorizationToken env
+     )
+  => env
+  -> bucketID
+  -> Maybe (Text, Maybe fileID)
+  -> Maybe Int64
+  -> Maybe Text
+  -> Maybe Text
+  -> Http.Manager
+  -> IO (Either Error Files)
+b2_list_file_versions env id startName maxCount prefix delimiter man = do
+  req <- generateTokenRequest env "/b2api/v1/b2_list_file_versions"
+  res <- Http.httpLbs req
+    { Http.requestBody=Http.RequestBodyLBS (Aeson.encode [aesonQQ|
+        { bucketId: #{getBucketID id}
+        , startFileName: #{startName}
+        , startFileId: #{join (fmap (fmap getFileID . snd) startName)}
+        , maxFileCount: #{maxCount}
+        , prefix: #{prefix}
+        , delimiter: #{delimiter}
+        }
+      |])
+    } man
+  parseResponse res
+
 generateBasicRequest
   :: HasBaseUrl env
   => env

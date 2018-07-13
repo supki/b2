@@ -214,9 +214,7 @@ spec = parallel $ do
         , uploadTimestamp: 1531422158000
         }
       |])) `shouldBe` pure File
-        { accountID="..."
-        , bucketID="041fc46015ee80d2684a0715"
-        , contentLength=13293
+        { contentLength=13293
         , contentSha1="unverified:5b13b936d24e0ea47940e84d3021866a05887688"
         , contentType="text/plain"
         , fileIDs=FileIDs
@@ -237,4 +235,42 @@ spec = parallel $ do
       |])) `shouldBe` pure FileIDs
         { fileID="..."
         , fileName=".vimrc"
+        }
+
+  describe "b2_list_file_names" $
+    it "parses success response" $ do
+      Aeson.eitherDecode (Aeson.encode ([aesonQQ|
+        { files:
+          [ { action: "upload"
+            , contentLength: 13293
+            , contentSha1: "unverified:5b13b936d24e0ea47940e84d3021866a05887688"
+            , contentType: "text/plain"
+            , fileId: "..."
+            , fileInfo:
+                { test: "value"
+                }
+            , fileName: ".vimrc"
+            , size: 13293
+            , uploadTimestamp: 1531423823000
+            }
+          ]
+        , nextFileName: null
+        }
+      |])) `shouldBe` pure Files
+        { files=
+          [ File
+            { contentLength=13293
+            , contentSha1="unverified:5b13b936d24e0ea47940e84d3021866a05887688"
+            , contentType="text/plain"
+            , fileIDs=FileIDs
+              { fileID="..."
+              , fileName=".vimrc"
+              }
+            , fileInfo=HashMap.singleton "test" "value"
+            , action="upload"
+            , uploadTimestamp=1531423823000
+            }
+          ]
+        , nextFileName=Nothing
+        , nextFileId=Nothing
         }
