@@ -219,8 +219,22 @@ spec = parallel $ do
         , contentLength=13293
         , contentSha1="unverified:5b13b936d24e0ea47940e84d3021866a05887688"
         , contentType="text/plain"
-        , fileID="..."
+        , fileIDs=FileIDs
+          { fileID="..."
+          , fileName=".vimrc"
+          }
         , fileInfo=HashMap.singleton "test" "value"
-        , fileName=".vimrc"
+        , action="upload"
         , uploadTimestamp=1531422158000
+        }
+
+  describe "b2_delete_file_version" $
+    it "parses success response" $ do
+      Aeson.decode (Aeson.encode ([aesonQQ|
+        { fileId: "..."
+        , fileName: ".vimrc"
+        }
+      |])) `shouldBe` pure FileIDs
+        { fileID="..."
+        , fileName=".vimrc"
         }

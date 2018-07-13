@@ -302,6 +302,28 @@ b2_upload_file env name contentType content info man = do
     } man
   parseResponse res
 
+b2_delete_file_version
+  :: ( HasFileID fileID
+     , HasFileName fileName
+     , HasBaseUrl env
+     , HasAuthorizationToken env
+     )
+  => env
+  -> fileID
+  -> fileName
+  -> Http.Manager
+  -> IO (Either Error FileIDs)
+b2_delete_file_version env id name man = do
+  req <- generateTokenRequest env "/b2api/v1/b2_delete_file_version"
+  res <- Http.httpLbs req
+    { Http.requestBody=Http.RequestBodyLBS (Aeson.encode [aesonQQ|
+        { fileId: #{getFileID id}
+        , fileName: #{getFileName name}
+        }
+      |])
+    } man
+  parseResponse res
+
 generateBasicRequest
   :: HasBaseUrl env
   => env
