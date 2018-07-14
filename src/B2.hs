@@ -7,36 +7,43 @@
 module B2
   ( module B2.AccountID
   , module B2.AuthorizationToken
-  , module B2.BaseUrl
   , module B2.Bucket
   , module B2.File
   , module B2.Key
   , module B2.Upload
+  , module B2.Url
   , module B2
   ) where
 
 import           Control.Exception (Exception, throwIO)
 import           Control.Monad (join)
+import           Control.Monad.IO.Class (MonadIO(..))
+import           Control.Monad.Trans.Resource (MonadResource)
 import           Data.Aeson ((.:))
 import qualified Data.Aeson as Aeson
 import           Data.Aeson.QQ (aesonQQ)
 import           Data.Bifunctor (bimap)
+import           Data.ByteString (ByteString)
 import qualified Data.ByteString.Lazy as Lazy (ByteString)
+import           Data.Conduit (ConduitT)
 import           Data.Int (Int64)
+import           Data.Maybe (fromMaybe)
 import           Data.Monoid ((<>))
+import           Data.String (fromString)
 import           Data.Text (Text)
 import qualified Data.Text.Encoding as Text
 import           Prelude hiding (id)
 import qualified Network.HTTP.Conduit as Http
 import qualified Network.HTTP.Types as Http
+import           Text.Printf (printf)
 
 import           B2.AccountID
 import           B2.AuthorizationToken
-import           B2.BaseUrl
 import           B2.Bucket
 import           B2.File
 import           B2.Key
 import           B2.Upload
+import           B2.Url
 
 
 data AuthorizeAccount = AuthorizeAccount
@@ -44,7 +51,7 @@ data AuthorizeAccount = AuthorizeAccount
   , authorizationToken      :: AuthorizationToken
   , allowed                 :: Allowed
   , apiUrl                  :: BaseUrl
-  , downloadUrl             :: Text
+  , downloadUrl             :: DownloadUrl
   , recommendedPartSize     :: Int64
   , absoluteMinimumPartSize :: Int64
   } deriving (Show, Eq)
@@ -84,6 +91,9 @@ instance HasAuthorizationToken AuthorizeAccount where
 instance HasBaseUrl AuthorizeAccount where
   getBaseUrl AuthorizeAccount {..} = apiUrl
 
+instance HasDownloadUrl AuthorizeAccount where
+  getDownloadUrl AuthorizeAccount {..} = downloadUrl
+
 data Error = Error
   { code    :: Text
   , message :: Text
@@ -112,7 +122,7 @@ b2_authorize_account
   -> Http.Manager
   -> IO (Either Error AuthorizeAccount)
 b2_authorize_account url keyID applicationKey man = do
-  req <- generateBasicRequest url keyID applicationKey "/b2api/v1/b2_authorize_account"
+  req <- basicRequest url keyID applicationKey "/b2api/v1/b2_authorize_account"
   res <- Http.httpLbs req
     { Http.requestBody=Http.RequestBodyLBS "{}"
     } man
@@ -134,7 +144,7 @@ b2_create_bucket
   -> Http.Manager
   -> IO (Either Error (Bucket info))
 b2_create_bucket env name type_ info cors lifecycle man = do
-  req <- generateTokenRequest env "/b2api/v1/b2_create_bucket"
+  req <- tokenRequest env "/b2api/v1/b2_create_bucket"
   res <- Http.httpLbs req
     { Http.requestBody=Http.RequestBodyLBS (Aeson.encode [aesonQQ|
         { accountId: #{getAccountID env}
@@ -162,7 +172,7 @@ b2_list_buckets
   -> Http.Manager
   -> IO (Either Error [Bucket info])
 b2_list_buckets env id name types man = do
-  req <- generateTokenRequest env "/b2api/v1/b2_list_buckets"
+  req <- tokenRequest env "/b2api/v1/b2_list_buckets"
   res <- Http.httpLbs req
     { Http.requestBody=Http.RequestBodyLBS (Aeson.encode [aesonQQ|
         { accountId: #{getAccountID env}
@@ -186,7 +196,7 @@ b2_delete_bucket
   -> Http.Manager
   -> IO (Either Error (Bucket info))
 b2_delete_bucket env id man = do
-  req <- generateTokenRequest env "/b2api/v1/b2_delete_bucket"
+  req <- tokenRequest env "/b2api/v1/b2_delete_bucket"
   res <- Http.httpLbs req
     { Http.requestBody=Http.RequestBodyLBS (Aeson.encode [aesonQQ|
         { accountId: #{getAccountID env}
@@ -203,14 +213,14 @@ b2_create_key
      , HasAuthorizationToken env
      )
   => env
-  -> [Text]
+  -> [Capability]
   -> Text
   -> Int64
   -> Maybe (bucketID, Maybe Text)
   -> Http.Manager
   -> IO (Either Error (Key ApplicationKey))
 b2_create_key env capabilities name durationS restrictions man = do
-  req <- generateTokenRequest env "/b2api/v1/b2_create_key"
+  req <- tokenRequest env "/b2api/v1/b2_create_key"
   res <- Http.httpLbs req
     { Http.requestBody=Http.RequestBodyLBS (Aeson.encode [aesonQQ|
         { accountId: #{getAccountID env}
@@ -235,7 +245,7 @@ b2_list_keys
   -> Http.Manager
   -> IO (Either Error Keys)
 b2_list_keys env maxKeyCount startApplicationKeyID man = do
-  req <- generateTokenRequest env "/b2api/v1/b2_list_keys"
+  req <- tokenRequest env "/b2api/v1/b2_list_keys"
   res <- Http.httpLbs req
     { Http.requestBody=Http.RequestBodyLBS (Aeson.encode [aesonQQ|
         { accountId: #{getAccountID env}
@@ -256,7 +266,7 @@ b2_delete_key
   -> Http.Manager
   -> IO (Either Error (Key NoSecret))
 b2_delete_key env id man = do
-  req <- generateTokenRequest env "/b2api/v1/b2_delete_key"
+  req <- tokenRequest env "/b2api/v1/b2_delete_key"
   res <- Http.httpLbs req
     { Http.requestBody=Http.RequestBodyLBS (Aeson.encode [aesonQQ|
         { applicationKeyId: #{getKeyID id}
@@ -275,7 +285,7 @@ b2_get_upload_url
   -> Http.Manager
   -> IO (Either Error UploadInfo)
 b2_get_upload_url env id man = do
-  req <- generateTokenRequest env "/b2api/v1/b2_get_upload_url"
+  req <- tokenRequest env "/b2api/v1/b2_get_upload_url"
   res <- Http.httpLbs req
     { Http.requestBody=Http.RequestBodyLBS (Aeson.encode [aesonQQ|
         { bucketId: #{getBucketID id}
@@ -296,7 +306,7 @@ b2_upload_file
   -> Http.Manager
   -> IO (Either Error File)
 b2_upload_file env name contentType content info man = do
-  req <- generateUploadRequest env name contentType info
+  req <- uploadRequest env name contentType info
   res <- Http.httpLbs req
     { Http.requestBody=Http.RequestBodyLBS content
     } man
@@ -314,7 +324,7 @@ b2_delete_file_version
   -> Http.Manager
   -> IO (Either Error FileIDs)
 b2_delete_file_version env id name man = do
-  req <- generateTokenRequest env "/b2api/v1/b2_delete_file_version"
+  req <- tokenRequest env "/b2api/v1/b2_delete_file_version"
   res <- Http.httpLbs req
     { Http.requestBody=Http.RequestBodyLBS (Aeson.encode [aesonQQ|
         { fileId: #{getFileID id}
@@ -334,7 +344,7 @@ b2_get_file_info
   -> Http.Manager
   -> IO (Either Error File)
 b2_get_file_info env id man = do
-  req <- generateTokenRequest env "/b2api/v1/b2_get_file_info"
+  req <- tokenRequest env "/b2api/v1/b2_get_file_info"
   res <- Http.httpLbs req
     { Http.requestBody=Http.RequestBodyLBS (Aeson.encode [aesonQQ|
         { fileId: #{getFileID id}
@@ -357,7 +367,7 @@ b2_list_file_names
   -> Http.Manager
   -> IO (Either Error Files)
 b2_list_file_names env id startName maxCount prefix delimiter man = do
-  req <- generateTokenRequest env "/b2api/v1/b2_list_file_names"
+  req <- tokenRequest env "/b2api/v1/b2_list_file_names"
   res <- Http.httpLbs req
     { Http.requestBody=Http.RequestBodyLBS (Aeson.encode [aesonQQ|
         { bucketId: #{getBucketID id}
@@ -386,7 +396,7 @@ b2_list_file_versions
   -> Http.Manager
   -> IO (Either Error Files)
 b2_list_file_versions env id startName maxCount prefix delimiter man = do
-  req <- generateTokenRequest env "/b2api/v1/b2_list_file_versions"
+  req <- tokenRequest env "/b2api/v1/b2_list_file_versions"
   res <- Http.httpLbs req
     { Http.requestBody=Http.RequestBodyLBS (Aeson.encode [aesonQQ|
         { bucketId: #{getBucketID id}
@@ -400,48 +410,80 @@ b2_list_file_versions env id startName maxCount prefix delimiter man = do
     } man
   parseResponse res
 
-generateBasicRequest
+b2_download_file_by_name
+  :: ( HasDownloadUrl env
+     , HasAuthorizationToken env
+     , MonadResource m
+     )
+  => env
+  -> (Maybe Int64, Maybe Int64)
+  -> Text
+  -> Text
+  -> Http.Manager
+  -> m (ConduitT i ByteString m ())
+b2_download_file_by_name env range bucketName fileName man = do
+  req <- downloadByNameRequest env range bucketName fileName
+  res <- Http.http req man
+  pure (Http.responseBody res)
+
+b2_download_file_by_id
+  :: ( HasFileID fileID
+     , HasDownloadUrl env
+     , HasAuthorizationToken env
+     , MonadResource m
+     )
+  => env
+  -> (Maybe Int64, Maybe Int64)
+  -> fileID
+  -> Http.Manager
+  -> m (ConduitT i ByteString m ())
+b2_download_file_by_id env range fileID man = do
+  req <- downloadByIDRequest env range fileID
+  res <- Http.http req man
+  pure (Http.responseBody res)
+
+basicRequest
   :: HasBaseUrl env
   => env
   -> KeyID
   -> ApplicationKey
   -> String
   -> IO Http.Request
-generateBasicRequest env KeyID {unKeyID} ApplicationKey {unApplicationKey} method = do
-  req <- generateRequest env method
+basicRequest env KeyID {unKeyID} ApplicationKey {unApplicationKey} method = do
+  req <- request env method
   pure (applyAuth req)
  where
   applyAuth =
     Http.applyBasicAuth (Text.encodeUtf8 unKeyID) (Text.encodeUtf8 unApplicationKey)
 
-generateTokenRequest
+tokenRequest
   :: ( HasBaseUrl env
      , HasAuthorizationToken env
      )
   => env
   -> String
   -> IO Http.Request
-generateTokenRequest env method = do
-  req <- generateRequest env method
+tokenRequest env method = do
+  req <- request env method
   pure req
     { Http.requestHeaders=authorization env : Http.requestHeaders req
     }
 
-generateRequest :: HasBaseUrl env => env -> String -> IO Http.Request
-generateRequest url method = do
+request :: HasBaseUrl env => env -> String -> IO Http.Request
+request url method = do
   req <- Http.parseRequest (unBaseUrl (getBaseUrl url) <> method)
   pure req
     { Http.method="POST"
     }
 
-generateUploadRequest
+uploadRequest
   :: (HasUploadUrl env, HasAuthorizationToken env)
   => env
   -> Text
   -> Maybe Text
   -> [(Http.HeaderName, Text)]
   -> IO Http.Request
-generateUploadRequest env name contentType info = do
+uploadRequest env name contentType info = do
   req <- Http.parseRequest (unUploadUrl (getUploadUrl env))
   pure req
     { Http.method="POST"
@@ -456,6 +498,53 @@ generateUploadRequest env name contentType info = do
  where
   urlEncode =
     Http.urlEncode True
+
+downloadByNameRequest
+  :: ( HasDownloadUrl env
+     , HasAuthorizationToken env
+     , MonadIO m
+     )
+  => env
+  -> (Maybe Int64, Maybe Int64)
+  -> Text
+  -> Text
+  -> m Http.Request
+downloadByNameRequest env range bucket file =
+  downloadRequest env range (printf "/file/%s/%s" bucket file)
+
+downloadByIDRequest
+  :: ( HasFileID fileID
+     , HasDownloadUrl env
+     , HasAuthorizationToken env
+     , MonadIO m
+     )
+  => env
+  -> (Maybe Int64, Maybe Int64)
+  -> fileID
+  -> m Http.Request
+downloadByIDRequest env range file =
+  downloadRequest env range method
+ where
+  method = printf "/b2api/v1/b2_download_file_by_id?fileId=%s" (getFileID file)
+
+downloadRequest
+  :: ( HasDownloadUrl env
+     , HasAuthorizationToken env
+     , MonadIO m
+     )
+  => env
+  -> (Maybe Int64, Maybe Int64)
+  -> String
+  -> m Http.Request
+downloadRequest env (from, to) method = liftIO $ do
+  req <- Http.parseRequest (unDownloadUrl (getDownloadUrl env) <> method)
+  pure req
+    { Http.requestHeaders=
+        ("Range", genRange) : authorization env : Http.requestHeaders req
+    }
+ where
+  genRange =
+    fromString (printf "bytes=%d-%s" (fromMaybe 0 from) (maybe "" show to))
 
 parseResponse
   :: (Aeson.FromJSON err, Aeson.FromJSON a)

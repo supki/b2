@@ -91,7 +91,7 @@ data NoSecret = NoSecret
     deriving (Show, Eq)
 
 newtype Capability = Capability { unCapability :: Text }
-    deriving (Show, Eq, IsString, Aeson.FromJSON)
+    deriving (Show, Eq, IsString, Aeson.FromJSON, Aeson.ToJSON)
 
 all :: Capability
 all = "all"
