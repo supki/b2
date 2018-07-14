@@ -274,3 +274,42 @@ spec = parallel $ do
         , nextFileName=Nothing
         , nextFileId=Nothing
         }
+
+  describe "b2_get_download_authorization" $
+    it "parses success response" $ do
+      Aeson.decode (Aeson.encode ([aesonQQ|
+        { authorizationToken: "..."
+        , bucketId: "041fc46015ee80d2684a0715"
+        , fileNamePrefix: ""
+        }
+      |])) `shouldBe` pure DownloadAuthorization
+        { authorizationToken="..."
+        , bucketID= "041fc46015ee80d2684a0715"
+        , fileNamePrefix=""
+        }
+
+  describe "b2_hide_file" $
+    it "parses success response" $ do
+      Aeson.decode (Aeson.encode ([aesonQQ|
+        { action: "hide"
+        , contentLength: 0
+        , contentSha1: "da39a3ee5e6b4b0d3255bfef95601890afd80709"
+        , contentType: "application/x-bz-hide-marker"
+        , fileId: "..."
+        , fileInfo: {}
+        , fileName: ".vimrc"
+        , size: 0
+        , uploadTimestamp: 1531574875000
+        }
+      |])) `shouldBe` pure File
+        { contentLength=0
+        , contentSha1="da39a3ee5e6b4b0d3255bfef95601890afd80709"
+        , contentType="application/x-bz-hide-marker"
+        , fileIDs=FileIDs
+          { fileID="..."
+          , fileName=".vimrc"
+          }
+        , fileInfo=HashMap.empty
+        , action="hide"
+        , uploadTimestamp=1531574875000
+        }

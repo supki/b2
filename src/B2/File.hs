@@ -2,10 +2,10 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE StrictData #-}
+{-# LANGUAGE TypeFamilies #-}
 module B2.File
   ( File(..)
   , FileIDs(..)
-  , FileID(..)
   , HasFileID(..)
   , FileName(..)
   , HasFileName(..)
@@ -18,7 +18,8 @@ import           Data.Int (Int64)
 import           Data.HashMap.Strict (HashMap)
 import           Data.String (IsString)
 import           Data.Text (Text)
-import           Text.Printf (PrintfArg)
+
+import           B2.ID (ID)
 
 
 data File = File
@@ -44,7 +45,7 @@ instance Aeson.FromJSON File where
       pure File {..}
 
 data FileIDs = FileIDs
-  { fileID   :: FileID
+  { fileID   :: ID File
   , fileName :: FileName
   } deriving (Show, Eq)
 
@@ -55,13 +56,10 @@ instance Aeson.FromJSON FileIDs where
       fileName <- o .: "fileName"
       pure FileIDs {..}
 
-newtype FileID = FileID { unFileID :: Text }
-    deriving (Show, Eq, IsString, PrintfArg, Aeson.FromJSON, Aeson.ToJSON)
-
 class HasFileID t where
-  getFileID :: t -> FileID
+  getFileID :: t -> ID File
 
-instance HasFileID FileID where
+instance file ~ File => HasFileID (ID file) where
   getFileID x = x
 
 instance HasFileID FileIDs where
@@ -88,7 +86,7 @@ instance HasFileName File where
 data Files = Files
   { files        :: [File]
   , nextFileName :: Maybe Text
-  , nextFileId   :: Maybe FileID
+  , nextFileId   :: Maybe (ID File)
   } deriving (Show, Eq)
 
 instance Aeson.FromJSON Files where

@@ -5,10 +5,10 @@
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE StrictData #-}
 module B2
-  ( module B2.AccountID
-  , module B2.AuthorizationToken
+  ( module B2.AuthorizationToken
   , module B2.Bucket
   , module B2.File
+  , module B2.ID
   , module B2.Key
   , module B2.Upload
   , module B2.Url
@@ -37,62 +37,14 @@ import qualified Network.HTTP.Conduit as Http
 import qualified Network.HTTP.Types as Http
 import           Text.Printf (printf)
 
-import           B2.AccountID
 import           B2.AuthorizationToken
 import           B2.Bucket
+import           B2.ID
 import           B2.File
 import           B2.Key
 import           B2.Upload
 import           B2.Url
 
-
-data AuthorizeAccount = AuthorizeAccount
-  { accountID               :: AccountID
-  , authorizationToken      :: AuthorizationToken
-  , allowed                 :: Allowed
-  , apiUrl                  :: BaseUrl
-  , downloadUrl             :: DownloadUrl
-  , recommendedPartSize     :: Int64
-  , absoluteMinimumPartSize :: Int64
-  } deriving (Show, Eq)
-
-instance Aeson.FromJSON AuthorizeAccount where
-  parseJSON =
-    Aeson.withObject "AuthorizeAccount" $ \o -> do
-      accountID <- o .: "accountId"
-      authorizationToken <- o .: "authorizationToken"
-      allowed <- o .: "allowed"
-      apiUrl <- o .: "apiUrl"
-      downloadUrl <- o .: "downloadUrl"
-      recommendedPartSize <- o .: "recommendedPartSize"
-      absoluteMinimumPartSize <- o .: "absoluteMinimumPartSize"
-      pure AuthorizeAccount {..}
-
-data Allowed = Allowed
-  { capabilities :: [Capability]
-  , bucketID     :: Maybe BucketID
-  , namePrefix   :: Maybe Text
-  } deriving (Show, Eq)
-
-instance Aeson.FromJSON Allowed where
-  parseJSON =
-    Aeson.withObject "Allowed" $ \o -> do
-      capabilities <- o .: "capabilities"
-      bucketID <- o .: "bucketId"
-      namePrefix <- o .: "namePrefix"
-      pure Allowed {..}
-
-instance HasAccountID AuthorizeAccount where
-  getAccountID AuthorizeAccount {..} = accountID
-
-instance HasAuthorizationToken AuthorizeAccount where
-  getAuthorizationToken AuthorizeAccount {..} = authorizationToken
-
-instance HasBaseUrl AuthorizeAccount where
-  getBaseUrl AuthorizeAccount {..} = apiUrl
-
-instance HasDownloadUrl AuthorizeAccount where
-  getDownloadUrl AuthorizeAccount {..} = downloadUrl
 
 data Error = Error
   { code    :: Text
@@ -117,7 +69,7 @@ instance Exception Ex
 b2_authorize_account
   :: HasBaseUrl url
   => url
-  -> KeyID
+  -> ID Key
   -> ApplicationKey
   -> Http.Manager
   -> IO (Either Error AuthorizeAccount)
@@ -241,7 +193,7 @@ b2_list_keys
      )
   => env
   -> Maybe Int64
-  -> Maybe KeyID
+  -> Maybe (ID Key)
   -> Http.Manager
   -> IO (Either Error Keys)
 b2_list_keys env maxKeyCount startApplicationKeyID man = do
@@ -442,19 +394,65 @@ b2_download_file_by_id env range fileID man = do
   res <- Http.http req man
   pure (Http.responseBody res)
 
+b2_get_download_authorization
+  :: ( HasBucketID bucketID
+     , HasBaseUrl env
+     , HasAuthorizationToken env
+     )
+  => env
+  -> bucketID
+  -> Text
+  -> Int64
+  -> Maybe Text
+  -> Http.Manager
+  -> IO (Either Error DownloadAuthorization)
+b2_get_download_authorization env bucket fileNamePrefix durationS disposition man = do
+  req <- tokenRequest env "/b2api/v1/b2_get_download_authorization"
+  res <- Http.httpLbs req
+    { Http.requestBody=Http.RequestBodyLBS (Aeson.encode [aesonQQ|
+        { bucketId: #{getBucketID bucket}
+        , fileNamePrefix: #{fileNamePrefix}
+        , validDurationInSeconds: #{durationS}
+        , b2ContentDisposition: #{disposition}
+        }
+      |])
+    } man
+  parseResponse res
+
+b2_hide_file
+  :: ( HasBucketID bucketID
+     , HasBaseUrl env
+     , HasAuthorizationToken env
+     )
+  => env
+  -> bucketID
+  -> Text
+  -> Http.Manager
+  -> IO (Either Error DownloadAuthorization)
+b2_hide_file env bucket fileName man = do
+  req <- tokenRequest env "/b2api/v1/b2_hide_file"
+  res <- Http.httpLbs req
+    { Http.requestBody=Http.RequestBodyLBS (Aeson.encode [aesonQQ|
+        { bucketId: #{getBucketID bucket}
+        , fileName: #{fileName}
+        }
+      |])
+    } man
+  parseResponse res
+
 basicRequest
   :: HasBaseUrl env
   => env
-  -> KeyID
+  -> ID Key
   -> ApplicationKey
   -> String
   -> IO Http.Request
-basicRequest env KeyID {unKeyID} ApplicationKey {unApplicationKey} method = do
+basicRequest env ID {unID} ApplicationKey {unApplicationKey} method = do
   req <- request env method
   pure (applyAuth req)
  where
   applyAuth =
-    Http.applyBasicAuth (Text.encodeUtf8 unKeyID) (Text.encodeUtf8 unApplicationKey)
+    Http.applyBasicAuth (Text.encodeUtf8 unID) (Text.encodeUtf8 unApplicationKey)
 
 tokenRequest
   :: ( HasBaseUrl env

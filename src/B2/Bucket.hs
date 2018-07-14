@@ -2,9 +2,9 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE StrictData #-}
+{-# LANGUAGE TypeFamilies #-}
 module B2.Bucket
   ( Bucket(..)
-  , BucketID(..)
   , HasBucketID(..)
   , BucketType(..)
   , LifecycleRule(..)
@@ -17,13 +17,14 @@ import           Data.Aeson ((.:), (.=))
 import qualified Data.Aeson as Aeson
 import           Data.Int (Int64)
 import           Data.List.NonEmpty (NonEmpty)
-import           Data.String (IsString)
 import           Data.Text (Text)
+
+import           B2.ID (ID(..))
 
 
 data Bucket info = Bucket
   { accountID      :: Text
-  , bucketID       :: BucketID
+  , bucketID       :: ID Bucket
   , bucketName     :: Text
   , bucketType     :: BucketType
   , bucketInfo     :: info
@@ -43,13 +44,10 @@ instance Aeson.FromJSON info => Aeson.FromJSON (Bucket info) where
       revision <- o .: "revision"
       pure Bucket {..}
 
-newtype BucketID = BucketID { unBucketID :: Text }
-    deriving (Show, Eq, IsString, Aeson.FromJSON, Aeson.ToJSON)
-
 class HasBucketID t where
-  getBucketID :: t -> BucketID
+  getBucketID :: t -> ID Bucket
 
-instance HasBucketID BucketID where
+instance bucket ~ Bucket => HasBucketID (ID bucket) where
   getBucketID x = x
 
 instance HasBucketID (Bucket info) where

@@ -13,11 +13,12 @@ import qualified Data.Aeson as Aeson
 import           Data.String (IsString)
 
 import           B2.AuthorizationToken (AuthorizationToken, HasAuthorizationToken(..))
-import           B2.Bucket (BucketID)
+import           B2.Bucket (Bucket)
+import           B2.ID (ID)
 
 
 data UploadInfo = UploadInfo
-  { bucketID           :: BucketID
+  { bucketID           :: ID Bucket
   , uploadUrl          :: UploadUrl
   , authorizationToken :: AuthorizationToken
   } deriving (Show, Eq)

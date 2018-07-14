@@ -3,9 +3,9 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE StrictData #-}
+{-# LANGUAGE TypeFamilies #-}
 module B2.Key
   ( Key(..)
-  , KeyID(..)
   , HasKeyID(..)
   , ApplicationKey(..)
   , NoSecret(..)
@@ -32,16 +32,16 @@ import           Data.String (IsString)
 import           Data.Text (Text)
 import           Prelude hiding (all)
 
-import           B2.AccountID (AccountID)
-import           B2.Bucket (BucketID)
+import           B2.Bucket (Bucket)
+import           B2.ID (ID, Account)
 
 
 data Key secret = Key
-  { applicationKeyID      :: KeyID
+  { applicationKeyID      :: ID Key
   , applicationKey        :: secret
   , capabilities          :: [Capability]
-  , accountID             :: AccountID
-  , bucketID              :: Maybe BucketID
+  , accountID             :: ID Account
+  , bucketID              :: Maybe (ID Bucket)
   , expirationTimestampMS :: Maybe Int64
   , keyName               :: Text
   , namePrefix            :: Maybe Text
@@ -72,13 +72,10 @@ instance Aeson.FromJSON (Key NoSecret) where
       namePrefix <- o .: "namePrefix"
       pure Key {applicationKey=NoSecret, ..}
 
-newtype KeyID = KeyID { unKeyID :: Text }
-    deriving (Show, Eq, IsString, Aeson.FromJSON, Aeson.ToJSON)
-
 class HasKeyID t where
-  getKeyID :: t -> KeyID
+  getKeyID :: t -> ID Key
 
-instance HasKeyID KeyID where
+instance key ~ Key => HasKeyID (ID key) where
   getKeyID x = x
 
 instance HasKeyID (Key secret) where
@@ -115,7 +112,7 @@ deleteFiles = "deleteFiles"
 
 data Keys = Keys
   { keys                 :: [Key NoSecret]
-  , nextApplicationKeyID :: Maybe KeyID
+  , nextApplicationKeyID :: Maybe (ID Key)
   } deriving (Show, Eq)
 
 instance Aeson.FromJSON Keys where
