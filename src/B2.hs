@@ -27,6 +27,7 @@ import           Data.ByteString (ByteString)
 import qualified Data.ByteString.Lazy as Lazy (ByteString)
 import           Data.Conduit (ConduitT)
 import           Data.Int (Int64)
+import qualified Data.HashMap.Strict as HashMap
 import           Data.Maybe (fromMaybe)
 import           Data.Monoid ((<>))
 import           Data.String (fromString)
@@ -435,6 +436,76 @@ b2_hide_file env bucket fileName man = do
     { Http.requestBody=Http.RequestBodyLBS (Aeson.encode [aesonQQ|
         { bucketId: #{getBucketID bucket}
         , fileName: #{fileName}
+        }
+      |])
+    } man
+  parseResponse res
+
+b2_get_upload_part_url
+  :: ( HasFileID fileID
+     , HasBaseUrl env
+     , HasAuthorizationToken env
+     )
+  => env
+  -> fileID
+  -> Http.Manager
+  -> IO (Either Error UploadPartInfo)
+b2_get_upload_part_url env id man = do
+  req <- tokenRequest env "/b2api/v1/b2_get_upload_part_url"
+  res <- Http.httpLbs req
+    { Http.requestBody=Http.RequestBodyLBS (Aeson.encode [aesonQQ|
+        { fileId: #{getFileID id}
+        }
+      |])
+    } man
+  parseResponse res
+
+b2_start_large_file
+  :: ( HasBucketID bucketID
+     , HasBaseUrl env
+     , HasAuthorizationToken env
+     )
+  => env
+  -> bucketID
+  -> Text
+  -> Text
+  -> Maybe [(Text, Text)]
+  -> Http.Manager
+  -> IO (Either Error LargeFile)
+b2_start_large_file env bucket fileName contentType info man = do
+  req <- tokenRequest env "/b2api/v1/b2_start_large_file"
+  res <- Http.httpLbs req
+    { Http.requestBody=Http.RequestBodyLBS (Aeson.encode [aesonQQ|
+        { bucketId: #{getBucketID bucket}
+        , fileName: #{fileName}
+        , contentType: #{contentType}
+        , fileInfo: #{fmap HashMap.fromList info}
+        }
+      |])
+    } man
+  parseResponse res
+
+b2_list_unfinished_large_files
+  :: ( HasBucketID bucketID
+     , HasFileID fileID
+     , HasBaseUrl env
+     , HasAuthorizationToken env
+     )
+  => env
+  -> bucketID
+  -> Maybe Text
+  -> Maybe fileID
+  -> Maybe Int64
+  -> Http.Manager
+  -> IO (Either Error LargeFiles)
+b2_list_unfinished_large_files env bucket namePrefix startFileID maxCount man = do
+  req <- tokenRequest env "/b2api/v1/b2_list_unfinished_large_files"
+  res <- Http.httpLbs req
+    { Http.requestBody=Http.RequestBodyLBS (Aeson.encode [aesonQQ|
+        { bucketId: #{getBucketID bucket}
+        , namePrefix: #{namePrefix}
+        , startFileId: #{fmap getFileID startFileID}
+        , maxFileCount: #{maxCount}
         }
       |])
     } man

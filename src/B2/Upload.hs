@@ -6,6 +6,9 @@ module B2.Upload
   ( UploadInfo(..)
   , UploadUrl(..)
   , HasUploadUrl(..)
+  , UploadPartInfo(..)
+  , UploadPartUrl(..)
+  , HasUploadPartUrl(..)
   ) where
 
 import           Data.Aeson ((.:))
@@ -14,6 +17,7 @@ import           Data.String (IsString)
 
 import           B2.AuthorizationToken (AuthorizationToken, HasAuthorizationToken(..))
 import           B2.Bucket (Bucket)
+import           B2.File (File)
 import           B2.ID (ID)
 
 
@@ -45,3 +49,32 @@ instance HasUploadUrl UploadUrl where
 
 instance HasUploadUrl UploadInfo where
   getUploadUrl = uploadUrl
+
+data UploadPartInfo = UploadPartInfo
+  { fileID             :: ID File
+  , uploadUrl          :: UploadPartUrl
+  , authorizationToken :: AuthorizationToken
+  } deriving (Show, Eq)
+
+instance Aeson.FromJSON UploadPartInfo where
+  parseJSON =
+    Aeson.withObject "UploadPartInfo" $ \o -> do
+      fileID <- o .: "fileId"
+      uploadUrl <- o .: "uploadUrl"
+      authorizationToken <- o .: "authorizationToken"
+      pure UploadPartInfo {..}
+
+instance HasAuthorizationToken UploadPartInfo where
+  getAuthorizationToken = authorizationToken
+
+newtype UploadPartUrl = UploadPartUrl { unUploadPartUrl :: String }
+    deriving (Show, Eq, IsString, Aeson.FromJSON)
+
+class HasUploadPartUrl t where
+  getUploadPartUrl :: t -> UploadPartUrl
+
+instance HasUploadPartUrl UploadPartUrl where
+  getUploadPartUrl x = x
+
+instance HasUploadPartUrl UploadPartInfo where
+  getUploadPartUrl = uploadUrl

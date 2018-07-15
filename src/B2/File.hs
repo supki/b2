@@ -10,6 +10,8 @@ module B2.File
   , FileName(..)
   , HasFileName(..)
   , Files(..)
+  , LargeFile(..)
+  , LargeFiles(..)
   ) where
 
 import           Data.Aeson ((.:), (.:?))
@@ -66,7 +68,7 @@ instance HasFileID FileIDs where
   getFileID = fileID
 
 instance HasFileID File where
-  getFileID = getFileID . fileIDs
+  getFileID File {..} = getFileID fileIDs
 
 newtype FileName = FileName { unFileName :: Text }
     deriving (Show, Eq, IsString, Aeson.FromJSON, Aeson.ToJSON)
@@ -81,7 +83,7 @@ instance HasFileName FileIDs where
   getFileName = fileName
 
 instance HasFileName File where
-  getFileName = getFileName . fileIDs
+  getFileName File {..} = getFileName fileIDs
 
 data Files = Files
   { files        :: [File]
@@ -96,3 +98,34 @@ instance Aeson.FromJSON Files where
       nextFileName <- o .: "nextFileName"
       nextFileId <- o .:? "nextFileId"
       pure Files {..}
+
+data LargeFile = LargeFile
+  { fileIDs         :: FileIDs
+  , contentType     :: Text
+  , fileInfo        :: HashMap Text Text
+  , uploadTimestamp :: Int64
+  } deriving (Show, Eq)
+
+instance Aeson.FromJSON LargeFile where
+  parseJSON =
+    Aeson.withObject "LargeFile" $ \o -> do
+      fileIDs <- Aeson.parseJSON (Aeson.Object o)
+      contentType <- o .: "contentType"
+      fileInfo <- o .: "fileInfo"
+      uploadTimestamp <- o .: "uploadTimestamp"
+      pure LargeFile {..}
+
+instance HasFileID LargeFile where
+  getFileID LargeFile {..} = getFileID fileIDs
+
+data LargeFiles = LargeFiles
+  { files      :: [LargeFile]
+  , nextFileID :: Maybe (ID File)
+  } deriving (Show, Eq)
+
+instance Aeson.FromJSON LargeFiles where
+  parseJSON =
+    Aeson.withObject "LargeFiles" $ \o -> do
+      files <- o .: "files"
+      nextFileID <- o .: "nextFileId"
+      pure LargeFiles {..}

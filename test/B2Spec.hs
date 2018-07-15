@@ -313,3 +313,54 @@ spec = parallel $ do
         , action="hide"
         , uploadTimestamp=1531574875000
         }
+
+  describe "b2_start_large_file" $
+    it "parses success response" $ do
+      Aeson.decode (Aeson.encode ([aesonQQ|
+        { accountId: "..."
+        , bucketId: "041fc46015ee80d2684a0715"
+        , contentType: "text/plain"
+        , fileId: "..."
+        , fileInfo: {}
+        , fileName: ".vimrc"
+        , uploadTimestamp: 1531637809000
+        }
+      |])) `shouldBe` pure LargeFile
+        { contentType="text/plain"
+        , fileIDs=FileIDs
+          { fileID="..."
+          , fileName=".vimrc"
+          }
+        , fileInfo=HashMap.empty
+        , uploadTimestamp=1531637809000
+        }
+
+  describe "b2_list_unfinished_large_files" $
+    it "parses success response" $ do
+      Aeson.decode (Aeson.encode ([aesonQQ|
+        { files:
+          [ { accountId: "..."
+            , bucketId: "041fc46015ee80d2684a0715"
+            , contentType: "text/plain"
+            , fileId: "..."
+            , fileInfo: {}
+            , fileName: ".vimrc"
+            , uploadTimestamp: 1531637809000
+            }
+          ]
+        , nextFileId: null
+        }
+      |])) `shouldBe` pure LargeFiles
+        { files=
+          [ LargeFile
+            { contentType="text/plain"
+            , fileIDs=FileIDs
+              { fileID="..."
+              , fileName=".vimrc"
+              }
+            , fileInfo=HashMap.empty
+            , uploadTimestamp=1531637809000
+            }
+          ]
+        , nextFileID=Nothing
+        }
