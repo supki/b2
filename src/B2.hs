@@ -137,6 +137,39 @@ b2_list_buckets env id name types man = do
     } man
   fmap (fmap unBuckets) (parseResponse res)
 
+b2_update_bucket
+  :: ( HasBucketID bucketID
+     , Aeson.FromJSON info
+     , Aeson.ToJSON info
+     , HasBaseUrl env
+     , HasAccountID env
+     , HasAuthorizationToken env
+     )
+  => env
+  -> bucketID
+  -> Maybe BucketType
+  -> Maybe info
+  -> Maybe [CorsRule]
+  -> Maybe [LifecycleRule]
+  -> Maybe Int64
+  -> Http.Manager
+  -> IO (Either Error (Bucket info))
+b2_update_bucket env bucket type_ info cors lifecycle revision man = do
+  req <- tokenRequest env "/b2api/v1/b2_update_bucket"
+  res <- Http.httpLbs req
+    { Http.requestBody=Http.RequestBodyLBS (Aeson.encode [aesonQQ|
+        { accountId: #{getAccountID env}
+        , bucketId: #{getBucketID bucket}
+        , bucketType: #{type_}
+        , bucketInfo: #{info}
+        , corsRules: #{cors}
+        , lifecycleRules: #{lifecycle}
+        , ifRevisionIs: #{revision}
+        }
+      |])
+    } man
+  parseResponse res
+
 b2_delete_bucket
   :: ( Aeson.FromJSON info
      , HasBucketID bucketID
@@ -506,6 +539,25 @@ b2_list_unfinished_large_files env bucket namePrefix startFileID maxCount man = 
         , namePrefix: #{namePrefix}
         , startFileId: #{fmap getFileID startFileID}
         , maxFileCount: #{maxCount}
+        }
+      |])
+    } man
+  parseResponse res
+
+b2_cancel_large_file
+  :: ( HasFileID fileID
+     , HasBaseUrl env
+     , HasAuthorizationToken env
+     )
+  => env
+  -> fileID
+  -> Http.Manager
+  -> IO (Either Error FileIDs)
+b2_cancel_large_file env file man = do
+  req <- tokenRequest env "/b2api/v1/b2_cancel_large_file"
+  res <- Http.httpLbs req
+    { Http.requestBody=Http.RequestBodyLBS (Aeson.encode [aesonQQ|
+        { fileId: #{getFileID file}
         }
       |])
     } man
