@@ -19,11 +19,13 @@ import           Control.Exception (Exception, throwIO)
 import           Control.Monad (join)
 import           Control.Monad.IO.Class (MonadIO(..))
 import           Control.Monad.Trans.Resource (MonadResource)
+import qualified Crypto.Hash as Hash
 import           Data.Aeson ((.:))
 import qualified Data.Aeson as Aeson
 import           Data.Aeson.QQ (aesonQQ)
 import           Data.Bifunctor (bimap)
 import           Data.ByteString (ByteString)
+import qualified Data.ByteString as ByteString
 import qualified Data.ByteString.Lazy as Lazy (ByteString)
 import           Data.Conduit (ConduitT)
 import           Data.Int (Int64)
@@ -113,23 +115,22 @@ b2_create_bucket env name type_ info cors lifecycle man = do
 
 b2_list_buckets
   :: ( Aeson.FromJSON info
-     , HasBucketID bucketID
      , HasBaseUrl env
      , HasAccountID env
      , HasAuthorizationToken env
      )
   => env
-  -> Maybe bucketID
+  -> Maybe (ID Bucket)
   -> Maybe Text
   -> Maybe [BucketType]
   -> Http.Manager
   -> IO (Either Error [Bucket info])
-b2_list_buckets env id name types man = do
+b2_list_buckets env bucket name types man = do
   req <- tokenRequest env "/b2api/v1/b2_list_buckets"
   res <- Http.httpLbs req
     { Http.requestBody=Http.RequestBodyLBS (Aeson.encode [aesonQQ|
         { accountId: #{getAccountID env}
-        , bucketId: #{fmap getBucketID id}
+        , bucketId: #{bucket}
         , bucketName: #{name}
         , bucketTypes: #{types}
         }
@@ -193,8 +194,7 @@ b2_delete_bucket env id man = do
   parseResponse res
 
 b2_create_key
-  :: ( HasBucketID bucketID
-     , HasBaseUrl env
+  :: ( HasBaseUrl env
      , HasAccountID env
      , HasAuthorizationToken env
      )
@@ -202,7 +202,7 @@ b2_create_key
   -> [Capability]
   -> Text
   -> Int64
-  -> Maybe (bucketID, Maybe Text)
+  -> Maybe (ID Bucket, Maybe Text)
   -> Http.Manager
   -> IO (Either Error (Key ApplicationKey))
 b2_create_key env capabilities name durationS restrictions man = do
@@ -213,7 +213,7 @@ b2_create_key env capabilities name durationS restrictions man = do
         , capabilities: #{capabilities}
         , keyName: #{name}
         , validDurationInSeconds: #{durationS}
-        , bucketId: #{fmap (getBucketID . fst) restrictions}
+        , bucketId: #{fmap fst restrictions}
         , namePrefix: #{join (fmap snd restrictions)}
         }
       |])
@@ -292,10 +292,8 @@ b2_upload_file
   -> Http.Manager
   -> IO (Either Error File)
 b2_upload_file env name contentType content info man = do
-  req <- uploadRequest env name contentType info
-  res <- Http.httpLbs req
-    { Http.requestBody=Http.RequestBodyLBS content
-    } man
+  req <- uploadRequest env name content contentType info
+  res <- Http.httpLbs req man
   parseResponse res
 
 b2_delete_file_version
@@ -368,14 +366,12 @@ b2_list_file_names env id startName maxCount prefix delimiter man = do
 
 b2_list_file_versions
   :: ( HasBucketID bucketID
-     , HasFileID fileID
-     , Aeson.ToJSON fileID
      , HasBaseUrl env
      , HasAuthorizationToken env
      )
   => env
   -> bucketID
-  -> Maybe (Text, Maybe fileID)
+  -> Maybe (Text, Maybe (ID File))
   -> Maybe Int64
   -> Maybe Text
   -> Maybe Text
@@ -387,7 +383,7 @@ b2_list_file_versions env id startName maxCount prefix delimiter man = do
     { Http.requestBody=Http.RequestBodyLBS (Aeson.encode [aesonQQ|
         { bucketId: #{getBucketID id}
         , startFileName: #{startName}
-        , startFileId: #{join (fmap (fmap getFileID . snd) startName)}
+        , startFileId: #{join (fmap snd startName)}
         , maxFileCount: #{maxCount}
         , prefix: #{prefix}
         , delimiter: #{delimiter}
@@ -520,14 +516,13 @@ b2_start_large_file env bucket fileName contentType info man = do
 
 b2_list_unfinished_large_files
   :: ( HasBucketID bucketID
-     , HasFileID fileID
      , HasBaseUrl env
      , HasAuthorizationToken env
      )
   => env
   -> bucketID
   -> Maybe Text
-  -> Maybe fileID
+  -> Maybe (ID File)
   -> Maybe Int64
   -> Http.Manager
   -> IO (Either Error LargeFiles)
@@ -537,7 +532,7 @@ b2_list_unfinished_large_files env bucket namePrefix startFileID maxCount man = 
     { Http.requestBody=Http.RequestBodyLBS (Aeson.encode [aesonQQ|
         { bucketId: #{getBucketID bucket}
         , namePrefix: #{namePrefix}
-        , startFileId: #{fmap getFileID startFileID}
+        , startFileId: #{startFileID}
         , maxFileCount: #{maxCount}
         }
       |])
@@ -561,6 +556,20 @@ b2_cancel_large_file env file man = do
         }
       |])
     } man
+  parseResponse res
+
+b2_upload_part
+  :: ( HasUploadPartUrl env
+     , HasAuthorizationToken env
+     )
+  => env
+  -> Int64
+  -> ByteString
+  -> Http.Manager
+  -> IO (Either Error LargeFilePart)
+b2_upload_part env idx part man = do
+  req <- uploadPartRequest env idx part
+  res <- Http.httpLbs req man
   parseResponse res
 
 basicRequest
@@ -601,10 +610,11 @@ uploadRequest
   :: (HasUploadUrl env, HasAuthorizationToken env)
   => env
   -> Text
+  -> Lazy.ByteString
   -> Maybe Text
   -> [(Http.HeaderName, Text)]
   -> IO Http.Request
-uploadRequest env name contentType info = do
+uploadRequest env name content contentType info = do
   req <- Http.parseRequest (unUploadUrl (getUploadUrl env))
   pure req
     { Http.method="POST"
@@ -615,10 +625,35 @@ uploadRequest env name contentType info = do
       : ("X-Bz-Content-Sha1", "do_not_verify")
       : map (bimap ("X-Bz-Info-" <>) (urlEncode . Text.encodeUtf8)) info
       )
+    , Http.requestBody=Http.RequestBodyLBS content
     }
  where
   urlEncode =
     Http.urlEncode True
+
+uploadPartRequest
+  :: (HasUploadPartUrl env, HasAuthorizationToken env)
+  => env
+  -> Int64
+  -> ByteString
+  -> IO Http.Request
+uploadPartRequest env idx content = do
+  req <- Http.parseRequest (unUploadPartUrl (getUploadPartUrl env))
+  pure req
+    { Http.method="POST"
+    , Http.requestHeaders=
+      ( authorization env
+      : ("X-Bz-Part-Number", text idx)
+      : ("Content-Length", text (ByteString.length content))
+      : ("X-Bz-Content-Sha1", text (Hash.hashWith Hash.SHA1 content))
+      : []
+      )
+    , Http.requestBody=Http.RequestBodyBS content
+    }
+ where
+  text :: Show a => a -> ByteString
+  text =
+    fromString . show
 
 downloadByNameRequest
   :: ( HasDownloadUrl env

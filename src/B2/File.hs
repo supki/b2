@@ -12,6 +12,7 @@ module B2.File
   , Files(..)
   , LargeFile(..)
   , LargeFiles(..)
+  , LargeFilePart(..)
   ) where
 
 import           Data.Aeson ((.:), (.:?))
@@ -129,3 +130,19 @@ instance Aeson.FromJSON LargeFiles where
       files <- o .: "files"
       nextFileID <- o .: "nextFileId"
       pure LargeFiles {..}
+
+data LargeFilePart = LargeFilePart
+  { fileID        :: ID File
+  , partNumber    :: Int64
+  , contentLength :: Int64
+  , contentSha1   :: Text
+  } deriving (Show, Eq)
+
+instance Aeson.FromJSON LargeFilePart where
+  parseJSON =
+    Aeson.withObject "LargeFilePart" $ \o -> do
+      fileID <- o .: "fileId"
+      partNumber <- o .: "partNumber"
+      contentLength <- o .: "contentLength"
+      contentSha1 <- o .: "contentSha1"
+      pure LargeFilePart {..}
