@@ -84,6 +84,25 @@ b2_authorize_account url keyID applicationKey man = do
     } man
   parseResponse res
 
+b2_cancel_large_file
+  :: ( HasFileID fileID
+     , HasBaseUrl env
+     , HasAuthorizationToken env
+     )
+  => env
+  -> fileID
+  -> Http.Manager
+  -> IO (Either Error FileIDs)
+b2_cancel_large_file env file man = do
+  req <- tokenRequest env "/b2api/v1/b2_cancel_large_file"
+  res <- Http.httpLbs req
+    { Http.requestBody=Http.RequestBodyLBS (Aeson.encode [aesonQQ|
+        { fileId: #{getFileID file}
+        }
+      |])
+    } man
+  parseResponse res
+
 b2_create_bucket
   :: ( Aeson.FromJSON info
      , Aeson.ToJSON info
@@ -109,86 +128,6 @@ b2_create_bucket env name type_ info cors lifecycle man = do
         , bucketInfo: #{info}
         , corsRules: #{cors}
         , lifecycleRules: #{lifecycle}
-        }
-      |])
-    } man
-  parseResponse res
-
-b2_list_buckets
-  :: ( Aeson.FromJSON info
-     , HasBaseUrl env
-     , HasAccountID env
-     , HasAuthorizationToken env
-     )
-  => env
-  -> Maybe (ID Bucket)
-  -> Maybe Text
-  -> Maybe [BucketType]
-  -> Http.Manager
-  -> IO (Either Error [Bucket info])
-b2_list_buckets env bucket name types man = do
-  req <- tokenRequest env "/b2api/v1/b2_list_buckets"
-  res <- Http.httpLbs req
-    { Http.requestBody=Http.RequestBodyLBS (Aeson.encode [aesonQQ|
-        { accountId: #{getAccountID env}
-        , bucketId: #{bucket}
-        , bucketName: #{name}
-        , bucketTypes: #{types}
-        }
-      |])
-    } man
-  fmap (fmap unBuckets) (parseResponse res)
-
-b2_update_bucket
-  :: ( HasBucketID bucketID
-     , Aeson.FromJSON info
-     , Aeson.ToJSON info
-     , HasBaseUrl env
-     , HasAccountID env
-     , HasAuthorizationToken env
-     )
-  => env
-  -> bucketID
-  -> Maybe BucketType
-  -> Maybe info
-  -> Maybe [CorsRule]
-  -> Maybe [LifecycleRule]
-  -> Maybe Int64
-  -> Http.Manager
-  -> IO (Either Error (Bucket info))
-b2_update_bucket env bucket type_ info cors lifecycle revision man = do
-  req <- tokenRequest env "/b2api/v1/b2_update_bucket"
-  res <- Http.httpLbs req
-    { Http.requestBody=Http.RequestBodyLBS (Aeson.encode [aesonQQ|
-        { accountId: #{getAccountID env}
-        , bucketId: #{getBucketID bucket}
-        , bucketType: #{type_}
-        , bucketInfo: #{info}
-        , corsRules: #{cors}
-        , lifecycleRules: #{lifecycle}
-        , ifRevisionIs: #{revision}
-        }
-      |])
-    } man
-  parseResponse res
-
-b2_delete_bucket
-  :: ( Aeson.FromJSON info
-     , HasBucketID bucketID
-     , HasBaseUrl env
-     , HasAccountID env
-     , HasAuthorizationToken env
-     )
-  => env
-  -> bucketID
-  -> Http.Manager
-  -> IO (Either Error (Bucket info))
-b2_delete_bucket env id man = do
-  req <- tokenRequest env "/b2api/v1/b2_delete_bucket"
-  res <- Http.httpLbs req
-    { Http.requestBody=Http.RequestBodyLBS (Aeson.encode [aesonQQ|
-        { accountId: #{getAccountID env}
-        , bucketId: #{getBucketID id}
         }
       |])
     } man
@@ -221,80 +160,26 @@ b2_create_key env capabilities name durationS restrictions man = do
     } man
   parseResponse res
 
-b2_list_keys
-  :: ( HasBaseUrl env
+b2_delete_bucket
+  :: ( Aeson.FromJSON info
+     , HasBucketID bucketID
+     , HasBaseUrl env
      , HasAccountID env
-     , HasAuthorizationToken env
-     )
-  => env
-  -> Maybe Int64
-  -> Maybe (ID Key)
-  -> Http.Manager
-  -> IO (Either Error Keys)
-b2_list_keys env maxKeyCount startApplicationKeyID man = do
-  req <- tokenRequest env "/b2api/v1/b2_list_keys"
-  res <- Http.httpLbs req
-    { Http.requestBody=Http.RequestBodyLBS (Aeson.encode [aesonQQ|
-        { accountId: #{getAccountID env}
-        , maxKeyCount: #{maxKeyCount}
-        , startApplicationKeyId: #{startApplicationKeyID}
-        }
-      |])
-    } man
-  parseResponse res
-
-b2_delete_key
-  :: ( HasKeyID keyID
-     , HasBaseUrl env
-     , HasAuthorizationToken env
-     )
-  => env
-  -> keyID
-  -> Http.Manager
-  -> IO (Either Error (Key NoSecret))
-b2_delete_key env id man = do
-  req <- tokenRequest env "/b2api/v1/b2_delete_key"
-  res <- Http.httpLbs req
-    { Http.requestBody=Http.RequestBodyLBS (Aeson.encode [aesonQQ|
-        { applicationKeyId: #{getKeyID id}
-        }
-      |])
-    } man
-  parseResponse res
-
-b2_get_upload_url
-  :: ( HasBucketID bucketID
-     , HasBaseUrl env
      , HasAuthorizationToken env
      )
   => env
   -> bucketID
   -> Http.Manager
-  -> IO (Either Error UploadInfo)
-b2_get_upload_url env id man = do
-  req <- tokenRequest env "/b2api/v1/b2_get_upload_url"
+  -> IO (Either Error (Bucket info))
+b2_delete_bucket env id man = do
+  req <- tokenRequest env "/b2api/v1/b2_delete_bucket"
   res <- Http.httpLbs req
     { Http.requestBody=Http.RequestBodyLBS (Aeson.encode [aesonQQ|
-        { bucketId: #{getBucketID id}
+        { accountId: #{getAccountID env}
+        , bucketId: #{getBucketID id}
         }
       |])
     } man
-  parseResponse res
-
-b2_upload_file
-  :: ( HasUploadUrl env
-     , HasAuthorizationToken env
-     )
-  => env
-  -> Text
-  -> Maybe Text
-  -> Lazy.ByteString
-  -> [(Http.HeaderName, Text)]
-  -> Http.Manager
-  -> IO (Either Error File)
-b2_upload_file env name contentType content info man = do
-  req <- uploadRequest env name content contentType info
-  res <- Http.httpLbs req man
   parseResponse res
 
 b2_delete_file_version
@@ -319,6 +204,103 @@ b2_delete_file_version env id name man = do
     } man
   parseResponse res
 
+b2_delete_key
+  :: ( HasKeyID keyID
+     , HasBaseUrl env
+     , HasAuthorizationToken env
+     )
+  => env
+  -> keyID
+  -> Http.Manager
+  -> IO (Either Error (Key NoSecret))
+b2_delete_key env id man = do
+  req <- tokenRequest env "/b2api/v1/b2_delete_key"
+  res <- Http.httpLbs req
+    { Http.requestBody=Http.RequestBodyLBS (Aeson.encode [aesonQQ|
+        { applicationKeyId: #{getKeyID id}
+        }
+      |])
+    } man
+  parseResponse res
+
+b2_download_file_by_id
+  :: ( HasFileID fileID
+     , HasDownloadUrl env
+     , HasAuthorizationToken env
+     , MonadResource m
+     )
+  => env
+  -> (Maybe Int64, Maybe Int64)
+  -> fileID
+  -> Http.Manager
+  -> m (ConduitT i ByteString m ())
+b2_download_file_by_id env range fileID man = do
+  req <- downloadByIDRequest env range fileID
+  res <- Http.http req man
+  pure (Http.responseBody res)
+
+b2_download_file_by_name
+  :: ( HasDownloadUrl env
+     , HasAuthorizationToken env
+     , MonadResource m
+     )
+  => env
+  -> (Maybe Int64, Maybe Int64)
+  -> Text
+  -> Text
+  -> Http.Manager
+  -> m (ConduitT i ByteString m ())
+b2_download_file_by_name env range bucketName fileName man = do
+  req <- downloadByNameRequest env range bucketName fileName
+  res <- Http.http req man
+  pure (Http.responseBody res)
+
+b2_finish_large_file
+  :: ( HasFileID fileID
+     , HasBaseUrl env
+     , HasAuthorizationToken env
+     )
+  => env
+  -> fileID
+  -> [Text]
+  -> Http.Manager
+  -> IO (Either Error File)
+b2_finish_large_file env file partSha1Array man = do
+  req <- tokenRequest env "/b2api/v1/b2_finish_large_file"
+  res <- Http.httpLbs req
+    { Http.requestBody=Http.RequestBodyLBS (Aeson.encode [aesonQQ|
+        { fileId: #{getFileID file}
+        , partSha1Array: #{partSha1Array}
+        }
+      |])
+    } man
+  parseResponse res
+
+b2_get_download_authorization
+  :: ( HasBucketID bucketID
+     , HasBaseUrl env
+     , HasAuthorizationToken env
+     )
+  => env
+  -> bucketID
+  -> Text
+  -> Int64
+  -> Maybe Text
+  -> Http.Manager
+  -> IO (Either Error DownloadAuthorization)
+b2_get_download_authorization env bucket fileNamePrefix durationS disposition man = do
+  req <- tokenRequest env "/b2api/v1/b2_get_download_authorization"
+  res <- Http.httpLbs req
+    { Http.requestBody=Http.RequestBodyLBS (Aeson.encode [aesonQQ|
+        { bucketId: #{getBucketID bucket}
+        , fileNamePrefix: #{fileNamePrefix}
+        , validDurationInSeconds: #{durationS}
+        , b2ContentDisposition: #{disposition}
+        }
+      |])
+    } man
+  parseResponse res
+
 b2_get_file_info
   :: ( HasFileID fileID
      , HasBaseUrl env
@@ -337,6 +319,90 @@ b2_get_file_info env id man = do
       |])
     } man
   parseResponse res
+
+b2_get_upload_url
+  :: ( HasBucketID bucketID
+     , HasBaseUrl env
+     , HasAuthorizationToken env
+     )
+  => env
+  -> bucketID
+  -> Http.Manager
+  -> IO (Either Error UploadInfo)
+b2_get_upload_url env id man = do
+  req <- tokenRequest env "/b2api/v1/b2_get_upload_url"
+  res <- Http.httpLbs req
+    { Http.requestBody=Http.RequestBodyLBS (Aeson.encode [aesonQQ|
+        { bucketId: #{getBucketID id}
+        }
+      |])
+    } man
+  parseResponse res
+
+b2_get_upload_part_url
+  :: ( HasFileID fileID
+     , HasBaseUrl env
+     , HasAuthorizationToken env
+     )
+  => env
+  -> fileID
+  -> Http.Manager
+  -> IO (Either Error UploadPartInfo)
+b2_get_upload_part_url env id man = do
+  req <- tokenRequest env "/b2api/v1/b2_get_upload_part_url"
+  res <- Http.httpLbs req
+    { Http.requestBody=Http.RequestBodyLBS (Aeson.encode [aesonQQ|
+        { fileId: #{getFileID id}
+        }
+      |])
+    } man
+  parseResponse res
+
+b2_hide_file
+  :: ( HasBucketID bucketID
+     , HasBaseUrl env
+     , HasAuthorizationToken env
+     )
+  => env
+  -> bucketID
+  -> Text
+  -> Http.Manager
+  -> IO (Either Error DownloadAuthorization)
+b2_hide_file env bucket fileName man = do
+  req <- tokenRequest env "/b2api/v1/b2_hide_file"
+  res <- Http.httpLbs req
+    { Http.requestBody=Http.RequestBodyLBS (Aeson.encode [aesonQQ|
+        { bucketId: #{getBucketID bucket}
+        , fileName: #{fileName}
+        }
+      |])
+    } man
+  parseResponse res
+
+b2_list_buckets
+  :: ( Aeson.FromJSON info
+     , HasBaseUrl env
+     , HasAccountID env
+     , HasAuthorizationToken env
+     )
+  => env
+  -> Maybe (ID Bucket)
+  -> Maybe Text
+  -> Maybe [BucketType]
+  -> Http.Manager
+  -> IO (Either Error [Bucket info])
+b2_list_buckets env bucket name types man = do
+  req <- tokenRequest env "/b2api/v1/b2_list_buckets"
+  res <- Http.httpLbs req
+    { Http.requestBody=Http.RequestBodyLBS (Aeson.encode [aesonQQ|
+        { accountId: #{getAccountID env}
+        , bucketId: #{bucket}
+        , bucketName: #{name}
+        , bucketTypes: #{types}
+        }
+      |])
+    } man
+  fmap (fmap unBuckets) (parseResponse res)
 
 b2_list_file_names
   :: ( HasBucketID bucketID
@@ -393,123 +459,46 @@ b2_list_file_versions env id startName maxCount prefix delimiter man = do
     } man
   parseResponse res
 
-b2_download_file_by_name
-  :: ( HasDownloadUrl env
-     , HasAuthorizationToken env
-     , MonadResource m
-     )
-  => env
-  -> (Maybe Int64, Maybe Int64)
-  -> Text
-  -> Text
-  -> Http.Manager
-  -> m (ConduitT i ByteString m ())
-b2_download_file_by_name env range bucketName fileName man = do
-  req <- downloadByNameRequest env range bucketName fileName
-  res <- Http.http req man
-  pure (Http.responseBody res)
-
-b2_download_file_by_id
-  :: ( HasFileID fileID
-     , HasDownloadUrl env
-     , HasAuthorizationToken env
-     , MonadResource m
-     )
-  => env
-  -> (Maybe Int64, Maybe Int64)
-  -> fileID
-  -> Http.Manager
-  -> m (ConduitT i ByteString m ())
-b2_download_file_by_id env range fileID man = do
-  req <- downloadByIDRequest env range fileID
-  res <- Http.http req man
-  pure (Http.responseBody res)
-
-b2_get_download_authorization
-  :: ( HasBucketID bucketID
-     , HasBaseUrl env
+b2_list_keys
+  :: ( HasBaseUrl env
+     , HasAccountID env
      , HasAuthorizationToken env
      )
   => env
-  -> bucketID
-  -> Text
-  -> Int64
-  -> Maybe Text
+  -> Maybe Int64
+  -> Maybe (ID Key)
   -> Http.Manager
-  -> IO (Either Error DownloadAuthorization)
-b2_get_download_authorization env bucket fileNamePrefix durationS disposition man = do
-  req <- tokenRequest env "/b2api/v1/b2_get_download_authorization"
+  -> IO (Either Error Keys)
+b2_list_keys env maxKeyCount startApplicationKeyID man = do
+  req <- tokenRequest env "/b2api/v1/b2_list_keys"
   res <- Http.httpLbs req
     { Http.requestBody=Http.RequestBodyLBS (Aeson.encode [aesonQQ|
-        { bucketId: #{getBucketID bucket}
-        , fileNamePrefix: #{fileNamePrefix}
-        , validDurationInSeconds: #{durationS}
-        , b2ContentDisposition: #{disposition}
+        { accountId: #{getAccountID env}
+        , maxKeyCount: #{maxKeyCount}
+        , startApplicationKeyId: #{startApplicationKeyID}
         }
       |])
     } man
   parseResponse res
 
-b2_hide_file
-  :: ( HasBucketID bucketID
-     , HasBaseUrl env
-     , HasAuthorizationToken env
-     )
-  => env
-  -> bucketID
-  -> Text
-  -> Http.Manager
-  -> IO (Either Error DownloadAuthorization)
-b2_hide_file env bucket fileName man = do
-  req <- tokenRequest env "/b2api/v1/b2_hide_file"
-  res <- Http.httpLbs req
-    { Http.requestBody=Http.RequestBodyLBS (Aeson.encode [aesonQQ|
-        { bucketId: #{getBucketID bucket}
-        , fileName: #{fileName}
-        }
-      |])
-    } man
-  parseResponse res
-
-b2_get_upload_part_url
+b2_list_parts
   :: ( HasFileID fileID
      , HasBaseUrl env
      , HasAuthorizationToken env
      )
   => env
   -> fileID
+  -> Maybe Int64
+  -> Maybe Int64
   -> Http.Manager
-  -> IO (Either Error UploadPartInfo)
-b2_get_upload_part_url env id man = do
-  req <- tokenRequest env "/b2api/v1/b2_get_upload_part_url"
+  -> IO (Either Error LargeFileParts)
+b2_list_parts env file startPartNumber maxCount man = do
+  req <- tokenRequest env "/b2api/v1/b2_list_parts"
   res <- Http.httpLbs req
     { Http.requestBody=Http.RequestBodyLBS (Aeson.encode [aesonQQ|
-        { fileId: #{getFileID id}
-        }
-      |])
-    } man
-  parseResponse res
-
-b2_start_large_file
-  :: ( HasBucketID bucketID
-     , HasBaseUrl env
-     , HasAuthorizationToken env
-     )
-  => env
-  -> bucketID
-  -> Text
-  -> Text
-  -> Maybe [(Text, Text)]
-  -> Http.Manager
-  -> IO (Either Error LargeFile)
-b2_start_large_file env bucket fileName contentType info man = do
-  req <- tokenRequest env "/b2api/v1/b2_start_large_file"
-  res <- Http.httpLbs req
-    { Http.requestBody=Http.RequestBodyLBS (Aeson.encode [aesonQQ|
-        { bucketId: #{getBucketID bucket}
-        , fileName: #{fileName}
-        , contentType: #{contentType}
-        , fileInfo: #{fmap HashMap.fromList info}
+        { fileId: #{getFileID file}
+        , startPartNumber: #{startPartNumber}
+        , maxPartCount: #{maxCount}
         }
       |])
     } man
@@ -540,23 +529,78 @@ b2_list_unfinished_large_files env bucket namePrefix startFileID maxCount man = 
     } man
   parseResponse res
 
-b2_cancel_large_file
-  :: ( HasFileID fileID
+b2_start_large_file
+  :: ( HasBucketID bucketID
      , HasBaseUrl env
      , HasAuthorizationToken env
      )
   => env
-  -> fileID
+  -> bucketID
+  -> Text
+  -> Text
+  -> Maybe [(Text, Text)]
   -> Http.Manager
-  -> IO (Either Error FileIDs)
-b2_cancel_large_file env file man = do
-  req <- tokenRequest env "/b2api/v1/b2_cancel_large_file"
+  -> IO (Either Error LargeFile)
+b2_start_large_file env bucket fileName contentType info man = do
+  req <- tokenRequest env "/b2api/v1/b2_start_large_file"
   res <- Http.httpLbs req
     { Http.requestBody=Http.RequestBodyLBS (Aeson.encode [aesonQQ|
-        { fileId: #{getFileID file}
+        { bucketId: #{getBucketID bucket}
+        , fileName: #{fileName}
+        , contentType: #{contentType}
+        , fileInfo: #{fmap HashMap.fromList info}
         }
       |])
     } man
+  parseResponse res
+
+b2_update_bucket
+  :: ( HasBucketID bucketID
+     , Aeson.FromJSON info
+     , Aeson.ToJSON info
+     , HasBaseUrl env
+     , HasAccountID env
+     , HasAuthorizationToken env
+     )
+  => env
+  -> bucketID
+  -> Maybe BucketType
+  -> Maybe info
+  -> Maybe [CorsRule]
+  -> Maybe [LifecycleRule]
+  -> Maybe Int64
+  -> Http.Manager
+  -> IO (Either Error (Bucket info))
+b2_update_bucket env bucket type_ info cors lifecycle revision man = do
+  req <- tokenRequest env "/b2api/v1/b2_update_bucket"
+  res <- Http.httpLbs req
+    { Http.requestBody=Http.RequestBodyLBS (Aeson.encode [aesonQQ|
+        { accountId: #{getAccountID env}
+        , bucketId: #{getBucketID bucket}
+        , bucketType: #{type_}
+        , bucketInfo: #{info}
+        , corsRules: #{cors}
+        , lifecycleRules: #{lifecycle}
+        , ifRevisionIs: #{revision}
+        }
+      |])
+    } man
+  parseResponse res
+
+b2_upload_file
+  :: ( HasUploadUrl env
+     , HasAuthorizationToken env
+     )
+  => env
+  -> Text
+  -> Maybe Text
+  -> Lazy.ByteString
+  -> [(Http.HeaderName, Text)]
+  -> Http.Manager
+  -> IO (Either Error File)
+b2_upload_file env name contentType content info man = do
+  req <- uploadRequest env name content contentType info
+  res <- Http.httpLbs req man
   parseResponse res
 
 b2_upload_part
@@ -571,29 +615,6 @@ b2_upload_part
 b2_upload_part env idx part man = do
   req <- uploadPartRequest env idx part
   res <- Http.httpLbs req man
-  parseResponse res
-
-b2_list_parts
-  :: ( HasFileID fileID
-     , HasBaseUrl env
-     , HasAuthorizationToken env
-     )
-  => env
-  -> fileID
-  -> Maybe Int64
-  -> Maybe Int64
-  -> Http.Manager
-  -> IO (Either Error LargeFileParts)
-b2_list_parts env file startPartNumber maxCount man = do
-  req <- tokenRequest env "/b2api/v1/b2_list_parts"
-  res <- Http.httpLbs req
-    { Http.requestBody=Http.RequestBodyLBS (Aeson.encode [aesonQQ|
-        { fileId: #{getFileID file}
-        , startPartNumber: #{startPartNumber}
-        , maxPartCount: #{maxCount}
-        }
-      |])
-    } man
   parseResponse res
 
 basicRequest
