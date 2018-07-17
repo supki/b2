@@ -18,11 +18,15 @@ default-extensions:
 library:
   dependencies:
     - aeson
+    - aeson-qq
     - bytestring
-    - base64-bytestring
+    - conduit
+    - cryptonite
     - http-conduit
     - http-types
+    - resourcet
     - text
+    - unordered-containers
   source-dirs:
     src
   ghc-options:
@@ -37,6 +41,7 @@ tests:
       - aeson-qq
       - b2
       - hspec
+      - unordered-containers
     source-dirs:
       test
     main:

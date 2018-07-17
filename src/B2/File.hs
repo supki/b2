@@ -10,9 +10,6 @@ module B2.File
   , FileName(..)
   , HasFileName(..)
   , Files(..)
-  , LargeFile(..)
-  , LargeFiles(..)
-  , LargeFilePart(..)
   ) where
 
 import           Data.Aeson ((.:), (.:?))
@@ -99,50 +96,3 @@ instance Aeson.FromJSON Files where
       nextFileName <- o .: "nextFileName"
       nextFileId <- o .:? "nextFileId"
       pure Files {..}
-
-data LargeFile = LargeFile
-  { fileIDs         :: FileIDs
-  , contentType     :: Text
-  , fileInfo        :: HashMap Text Text
-  , uploadTimestamp :: Int64
-  } deriving (Show, Eq)
-
-instance Aeson.FromJSON LargeFile where
-  parseJSON =
-    Aeson.withObject "LargeFile" $ \o -> do
-      fileIDs <- Aeson.parseJSON (Aeson.Object o)
-      contentType <- o .: "contentType"
-      fileInfo <- o .: "fileInfo"
-      uploadTimestamp <- o .: "uploadTimestamp"
-      pure LargeFile {..}
-
-instance HasFileID LargeFile where
-  getFileID LargeFile {..} = getFileID fileIDs
-
-data LargeFiles = LargeFiles
-  { files      :: [LargeFile]
-  , nextFileID :: Maybe (ID File)
-  } deriving (Show, Eq)
-
-instance Aeson.FromJSON LargeFiles where
-  parseJSON =
-    Aeson.withObject "LargeFiles" $ \o -> do
-      files <- o .: "files"
-      nextFileID <- o .: "nextFileId"
-      pure LargeFiles {..}
-
-data LargeFilePart = LargeFilePart
-  { fileID        :: ID File
-  , partNumber    :: Int64
-  , contentLength :: Int64
-  , contentSha1   :: Text
-  } deriving (Show, Eq)
-
-instance Aeson.FromJSON LargeFilePart where
-  parseJSON =
-    Aeson.withObject "LargeFilePart" $ \o -> do
-      fileID <- o .: "fileId"
-      partNumber <- o .: "partNumber"
-      contentLength <- o .: "contentLength"
-      contentSha1 <- o .: "contentSha1"
-      pure LargeFilePart {..}

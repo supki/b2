@@ -364,3 +364,43 @@ spec = parallel $ do
           ]
         , nextFileID=Nothing
         }
+
+  describe "b2_upload_part" $
+    it "parses success response" $ do
+      Aeson.decode (Aeson.encode ([aesonQQ|
+        { fileId: "..."
+        , contentLength: 4
+        , contentSha1: "f68f58a2791058311196bfcbb46f2f98038ddac2"
+        , partNumber: 1
+        }
+      |])) `shouldBe` pure LargeFilePart
+        { fileID="..."
+        , partNumber=1
+        , contentLength=4
+        , contentSha1="f68f58a2791058311196bfcbb46f2f98038ddac2"
+        }
+
+  describe "b2_list_parts" $
+    it "parses success response" $ do
+      Aeson.decode (Aeson.encode ([aesonQQ|
+        { nextPartNumber: null
+        , parts:
+          [ { contentLength: 4
+            , contentSha1: "f68f58a2791058311196bfcbb46f2f98038ddac2"
+            , fileId: "..."
+            , partNumber: 1
+            , uploadTimestamp: 1531847978000
+            }
+          ]
+        }
+      |])) `shouldBe` pure LargeFileParts
+        { nextPartNumber=Nothing
+        , parts=
+          [ LargeFilePart
+            { fileID="..."
+            , partNumber=1
+            , contentLength=4
+            , contentSha1="f68f58a2791058311196bfcbb46f2f98038ddac2"
+            }
+          ]
+        }

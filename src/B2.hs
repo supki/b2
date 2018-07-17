@@ -10,6 +10,7 @@ module B2
   , module B2.File
   , module B2.ID
   , module B2.Key
+  , module B2.LargeFile
   , module B2.Upload
   , module B2.Url
   , module B2
@@ -25,7 +26,6 @@ import qualified Data.Aeson as Aeson
 import           Data.Aeson.QQ (aesonQQ)
 import           Data.Bifunctor (bimap)
 import           Data.ByteString (ByteString)
-import qualified Data.ByteString as ByteString
 import qualified Data.ByteString.Lazy as Lazy (ByteString)
 import           Data.Conduit (ConduitT)
 import           Data.Int (Int64)
@@ -44,6 +44,7 @@ import           B2.AuthorizationToken
 import           B2.Bucket
 import           B2.ID
 import           B2.File
+import           B2.LargeFile
 import           B2.Key
 import           B2.Upload
 import           B2.Url
@@ -572,6 +573,29 @@ b2_upload_part env idx part man = do
   res <- Http.httpLbs req man
   parseResponse res
 
+b2_list_parts
+  :: ( HasFileID fileID
+     , HasBaseUrl env
+     , HasAuthorizationToken env
+     )
+  => env
+  -> fileID
+  -> Maybe Int64
+  -> Maybe Int64
+  -> Http.Manager
+  -> IO (Either Error LargeFileParts)
+b2_list_parts env file startPartNumber maxCount man = do
+  req <- tokenRequest env "/b2api/v1/b2_list_parts"
+  res <- Http.httpLbs req
+    { Http.requestBody=Http.RequestBodyLBS (Aeson.encode [aesonQQ|
+        { fileId: #{getFileID file}
+        , startPartNumber: #{startPartNumber}
+        , maxPartCount: #{maxCount}
+        }
+      |])
+    } man
+  parseResponse res
+
 basicRequest
   :: HasBaseUrl env
   => env
@@ -644,7 +668,6 @@ uploadPartRequest env idx content = do
     , Http.requestHeaders=
       ( authorization env
       : ("X-Bz-Part-Number", text idx)
-      : ("Content-Length", text (ByteString.length content))
       : ("X-Bz-Content-Sha1", text (Hash.hashWith Hash.SHA1 content))
       : []
       )
