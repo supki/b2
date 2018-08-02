@@ -1,3 +1,4 @@
+{-# LANGUAGE StrictData #-}
 module Opts
   ( Cmd(..)
   , get
@@ -5,8 +6,9 @@ module Opts
 
 import           Options.Applicative
 import           Data.Int (Int64)
-import           Data.String (fromString)
+import           Data.String (IsString(..))
 import           Data.Text (Text)
+import qualified Env
 
 import qualified B2
 import qualified Cfg
@@ -26,14 +28,16 @@ get :: IO Cmd
 get =
   execParser (info (parser <**> helper) (fullDesc <> header Cfg.usageHeader))
  where
-  parser :: Parser Cmd
   parser =
     subparser (command "create-key" (info createKeyP (progDesc "Create a new key")))
    where
     createKeyP = CreateKey
-      <$> fmap (map fromString . words) (argument str (metavar "CAPABILITIES"))
+      <$> argument csv (metavar "CAPABILITIES")
       <*> argument str (metavar "NAME")
       <*> argument auto (metavar "DURATION_S")
       <*> optional (option str (long "bucket" <> metavar "BUCKET"))
       <*> optional (option str (long "prefix" <> metavar "PREFIX"))
 
+csv :: IsString str => ReadM [str]
+csv =
+  eitherReader (fmap (map fromString) . Env.splitOn ',')

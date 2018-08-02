@@ -16,6 +16,7 @@ import qualified Meta_b2_cli as Meta
 data Cfg = Cfg
   { cfgKeyID          :: B2.ID B2.Key
   , cfgApplicationKey :: B2.ApplicationKey
+  , cfgBaseUrl        :: B2.BaseUrl
   } deriving (Show, Eq)
 
 get :: IO Cfg
@@ -25,6 +26,8 @@ get =
       var str "KEY_ID" (help "Key ID")
     cfgApplicationKey <-
       var str "APPLICATION_KEY" (help "Application key")
+    cfgBaseUrl <-
+      var str "BASE_URL" (help "Base URL" <> def B2.defaultBaseUrl <> helpDef show)
     pure Cfg {..}
 
 version :: String

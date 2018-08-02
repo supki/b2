@@ -1,3 +1,4 @@
+{-# LANGUAGE DerivingStrategies #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 module B2.Url
   ( BaseUrl(..)
@@ -12,7 +13,8 @@ import           Data.String (IsString)
 
 
 newtype BaseUrl = BaseUrl { unBaseUrl :: String }
-    deriving (Show, Eq, IsString, Aeson.FromJSON)
+    deriving         (Eq, IsString, Aeson.FromJSON)
+    deriving newtype (Show)
 
 class HasBaseUrl t where
   getBaseUrl :: t -> BaseUrl
@@ -25,7 +27,8 @@ defaultBaseUrl =
   "https://api.backblazeb2.com"
 
 newtype DownloadUrl = DownloadUrl { unDownloadUrl :: String }
-    deriving (Show, Eq, IsString, Aeson.FromJSON)
+    deriving         (Eq, IsString, Aeson.FromJSON)
+    deriving newtype (Show)
 
 class HasDownloadUrl t where
   getDownloadUrl :: t -> DownloadUrl

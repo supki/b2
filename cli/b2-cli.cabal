@@ -2,7 +2,7 @@
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 5c2253f0ef2a2ccb8c8b9965868358636e37490a4eeefbf5d40767eba3a8a8b4
+-- hash: a306d374955ca7b78d2b5aad2abbb17ae35bab8d8177ba3310e2501efa0b35cb
 
 name:           b2-cli
 version:        1.0.0
@@ -29,8 +29,10 @@ library
   default-extensions: OverloadedStrings
   ghc-options: -funbox-strict-fields -Wall -Werror
   build-depends:
-      b2
+      aeson
+    , b2
     , base >=4.7 && <5
+    , bytestring
     , envparse
     , http-conduit
     , optparse-applicative

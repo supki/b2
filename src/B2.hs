@@ -21,7 +21,7 @@ import           Control.Monad (join)
 import           Control.Monad.IO.Class (MonadIO(..))
 import           Control.Monad.Trans.Resource (MonadResource)
 import qualified Crypto.Hash as Hash
-import           Data.Aeson ((.:))
+import           Data.Aeson ((.:), (.=))
 import qualified Data.Aeson as Aeson
 import           Data.Aeson.QQ (aesonQQ)
 import           Data.Bifunctor (bimap)
@@ -63,6 +63,14 @@ instance Aeson.FromJSON Error where
       message <- o .: "message"
       status <- o .: "status"
       pure Error {..}
+
+instance Aeson.ToJSON Error where
+  toJSON Error {..} =
+    Aeson.object
+      [ "code" .= code
+      , "message" .= message
+      , "status" .= status
+      ]
 
 data Ex
   = JsonEx Lazy.ByteString String

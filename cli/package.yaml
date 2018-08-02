@@ -25,7 +25,9 @@ default-extensions:
 
 library:
   dependencies:
+    - aeson
     - b2
+    - bytestring
     - envparse
     - http-conduit
     - optparse-applicative
