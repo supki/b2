@@ -1,4 +1,6 @@
 resolver: lts-11.17
 packages:
   - '.'
+extra-deps:
+  - 'envparse-0.4.1'
 allow-newer: true

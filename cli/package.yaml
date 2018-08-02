@@ -1,0 +1,55 @@
+name: b2-cli
+version: 1.0.0
+synopsis: b2
+description: See README.markdown
+category: Web
+maintainer: matvey.aksenov@gmail.com
+copyright: Matvey Aksenov 2018
+license: BSD2
+extra-source-files:
+  - README.markdown
+
+custom-setup:
+  dependencies:
+    - base
+    - Cabal
+    - directory
+    - filepath
+    - process
+
+dependencies:
+  - base >= 4.7 && < 5
+
+default-extensions:
+  - OverloadedStrings
+
+library:
+  dependencies:
+    - b2
+    - envparse
+    - http-conduit
+    - optparse-applicative
+    - text
+  source-dirs:
+    src
+  other-modules:
+    Meta_b2_cli
+  ghc-options:
+    - -funbox-strict-fields
+    - -Wall
+    - -Werror
+
+executables:
+  'b2-cli':
+    dependencies:
+      - b2
+      - b2-cli
+    source-dirs:
+      driver
+    main:
+      Main.hs
+    ghc-options:
+      - -Wall
+      - -Werror
+      - -threaded
+      - -with-rtsopts=-N

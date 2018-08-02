@@ -1,3 +1,4 @@
+{-# LANGUAGE DerivingStrategies #-}
 {-# LANGUAGE DuplicateRecordFields #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
@@ -82,13 +83,15 @@ instance HasKeyID (Key secret) where
   getKeyID = applicationKeyID
 
 newtype ApplicationKey = ApplicationKey { unApplicationKey :: Text }
-    deriving (Show, Eq, IsString, Aeson.FromJSON)
+    deriving         (Eq, IsString, Aeson.FromJSON)
+    deriving newtype (Show)
 
 data NoSecret = NoSecret
     deriving (Show, Eq)
 
 newtype Capability = Capability { unCapability :: Text }
-    deriving (Show, Eq, IsString, Aeson.FromJSON, Aeson.ToJSON)
+    deriving         (Eq, IsString, Aeson.FromJSON, Aeson.ToJSON)
+    deriving newtype (Show)
 
 all :: Capability
 all = "all"

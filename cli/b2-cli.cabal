@@ -1,0 +1,58 @@
+-- This file has been generated from package.yaml by hpack version 0.20.0.
+--
+-- see: https://github.com/sol/hpack
+--
+-- hash: 5c2253f0ef2a2ccb8c8b9965868358636e37490a4eeefbf5d40767eba3a8a8b4
+
+name:           b2-cli
+version:        1.0.0
+synopsis:       b2
+description:    See README.markdown
+category:       Web
+maintainer:     matvey.aksenov@gmail.com
+copyright:      Matvey Aksenov 2018
+license:        BSD2
+build-type:     Custom
+cabal-version:  >= 1.10
+
+custom-setup
+  setup-depends:
+      Cabal
+    , base
+    , directory
+    , filepath
+    , process
+
+library
+  hs-source-dirs:
+      src
+  default-extensions: OverloadedStrings
+  ghc-options: -funbox-strict-fields -Wall -Werror
+  build-depends:
+      b2
+    , base >=4.7 && <5
+    , envparse
+    , http-conduit
+    , optparse-applicative
+    , text
+  exposed-modules:
+      App
+      Cfg
+      Opts
+  other-modules:
+      Meta_b2_cli
+  default-language: Haskell2010
+
+executable b2-cli
+  main-is: Main.hs
+  hs-source-dirs:
+      driver
+  default-extensions: OverloadedStrings
+  ghc-options: -Wall -Werror -threaded -with-rtsopts=-N
+  build-depends:
+      b2
+    , b2-cli
+    , base >=4.7 && <5
+  other-modules:
+      Paths_b2_cli
+  default-language: Haskell2010

@@ -1,3 +1,4 @@
+{-# LANGUAGE DerivingStrategies #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
@@ -16,7 +17,8 @@ import           Text.Printf (PrintfArg)
 
 
 newtype ID tag = ID { unID :: Text }
-    deriving (Show, Eq, IsString, PrintfArg, Aeson.FromJSON, Aeson.ToJSON)
+    deriving         (Eq, IsString, PrintfArg, Aeson.FromJSON, Aeson.ToJSON)
+    deriving newtype (Show)
 
 data Account
 
