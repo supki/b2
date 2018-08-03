@@ -25,8 +25,11 @@ run Cfg {..} cmd = do
       keyE <- B2.b2_create_key token capabilities name durationS (fmap (\b -> (b, prefix)) bucket) man
       key <- dieE keyE
       print key
+    ListKeys maxCount startKeyID -> do
+      keysE <- B2.b2_list_keys token maxCount startKeyID man
+      keys <- dieE keysE
+      print keys
 
 dieE :: Aeson.ToJSON e => Either e a -> IO a
 dieE =
   either (\e -> do ByteString.Lazy.hPutStrLn stderr (Aeson.encode e); exitFailure) pure
-

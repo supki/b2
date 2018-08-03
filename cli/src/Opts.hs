@@ -22,14 +22,23 @@ data Cmd
       Int64
       (Maybe (B2.ID B2.Bucket))
       (Maybe Text)
+  | ListKeys
+      (Maybe Int64)
+      (Maybe (B2.ID B2.Key))
     deriving (Show, Eq)
 
 get :: IO Cmd
 get =
-  execParser (info (parser <**> helper) (fullDesc <> header Cfg.usageHeader))
+  customExecParser parserPrefs (info (helper <*> parser) (fullDesc <> header Cfg.usageHeader))
  where
+  parserPrefs =
+    prefs showHelpOnError
   parser =
-    subparser (command "create-key" (info createKeyP (progDesc "Create a new key")))
+    subparser
+      (mconcat
+        [ command "create-key" (info (helper <*> createKeyP) (progDesc "Create a new key"))
+        , command "list-keys" (info (helper <*> listKeysP) (progDesc "List keys"))
+        ])
    where
     createKeyP = CreateKey
       <$> argument csv (metavar "CAPABILITIES")
@@ -37,6 +46,9 @@ get =
       <*> argument auto (metavar "DURATION_S")
       <*> optional (option str (long "bucket" <> metavar "BUCKET"))
       <*> optional (option str (long "prefix" <> metavar "PREFIX"))
+    listKeysP = ListKeys
+      <$> optional (option auto (long "max-count" <> metavar "COUNT"))
+      <*> optional (option str (long "start-key-id" <> metavar "KEY_ID"))
 
 csv :: IsString str => ReadM [str]
 csv =
