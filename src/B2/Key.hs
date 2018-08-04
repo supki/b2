@@ -26,7 +26,7 @@ module B2.Key
   , Keys(..)
   ) where
 
-import           Data.Aeson ((.:))
+import           Data.Aeson ((.:), (.=))
 import qualified Data.Aeson as Aeson
 import           Data.Int (Int64)
 import           Data.String (IsString)
@@ -73,6 +73,18 @@ instance Aeson.FromJSON (Key NoSecret) where
       namePrefix <- o .: "namePrefix"
       pure Key {applicationKey=NoSecret, ..}
 
+instance Aeson.ToJSON secret => Aeson.ToJSON (Key secret) where
+  toJSON Key {..} =
+    Aeson.object
+      [ "applicationKeyId" .= applicationKeyID
+      , "capabilities" .= capabilities
+      , "accountId" .= accountID
+      , "bucketId" .= bucketID
+      , "expirationTimestamp" .= expirationTimestampMS
+      , "keyName" .= keyName
+      , "namePrefix" .= namePrefix
+      ]
+
 class HasKeyID t where
   getKeyID :: t -> ID Key
 
@@ -83,11 +95,15 @@ instance HasKeyID (Key secret) where
   getKeyID = applicationKeyID
 
 newtype ApplicationKey = ApplicationKey { unApplicationKey :: Text }
-    deriving         (Eq, IsString, Aeson.FromJSON)
+    deriving         (Eq, IsString, Aeson.FromJSON, Aeson.ToJSON)
     deriving newtype (Show)
 
 data NoSecret = NoSecret
     deriving (Show, Eq)
+
+instance Aeson.ToJSON NoSecret where
+  toJSON _ =
+    Aeson.Null
 
 newtype Capability = Capability { unCapability :: Text }
     deriving         (Eq, IsString, Aeson.FromJSON, Aeson.ToJSON)
@@ -124,3 +140,10 @@ instance Aeson.FromJSON Keys where
       keys <- o .: "keys"
       nextApplicationKeyID <- o .: "nextApplicationKeyId"
       pure Keys {..}
+
+instance Aeson.ToJSON Keys where
+  toJSON Keys {..} =
+    Aeson.object
+      [ "keys" .= keys
+      , "nextApplicationKeyId" .= nextApplicationKeyID
+      ]

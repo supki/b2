@@ -127,7 +127,6 @@ spec = parallel $ do
         , keyName="key01"
         , namePrefix=Nothing
         }
-      pendingWith "Not implemented by B2"
 
   describe "b2_list_keys" $
     it "parses success response" $ do
@@ -159,7 +158,6 @@ spec = parallel $ do
           ]
         , nextApplicationKeyID=pure "01020305"
         }
-      pendingWith "Not implemented by B2"
 
   describe "b2_delete_key" $
     it "parses success response" $ do
@@ -182,7 +180,6 @@ spec = parallel $ do
         , keyName="key01"
         , namePrefix=Nothing
         }
-      pendingWith "Not implemented by B2"
 
   describe "b2_get_upload_url" $
     it "parses success response" $ do
