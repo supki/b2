@@ -70,7 +70,7 @@ spec = parallel $ do
       |])) `shouldBe` pure Bucket
         { accountID="..."
         , bucketID="843f1470e5fe80a2684a0715"
-        , bucketInfo=Aeson.Object mempty
+        , bucketInfo=mempty
         , bucketName="bucket01"
         , bucketType=AllPrivate
         , lifecycleRules=[]
@@ -97,7 +97,7 @@ spec = parallel $ do
           [ Bucket
             { accountID="..."
             , bucketID="843f1470e5fe80a2684a0715"
-            , bucketInfo=Aeson.Object mempty
+            , bucketInfo=mempty
             , bucketName="bucket01"
             , bucketType=AllPrivate
             , lifecycleRules=[]

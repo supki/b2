@@ -1,3 +1,4 @@
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE StrictData #-}
 module Opts
   ( Cmd(..)
@@ -27,6 +28,9 @@ data Cmd
       (Maybe (B2.ID B2.Key))
   | DeleteKey
       (B2.ID B2.Key)
+  | CreateBucket
+      B2.BucketType
+      Text
     deriving (Show, Eq)
 
 get :: IO Cmd
@@ -38,9 +42,10 @@ get =
   parser =
     subparser
       (mconcat
-        [ command "create-key" (info (helper <*> createKeyP) (progDesc "Create a new key"))
+        [ command "create-key" (info (helper <*> createKeyP) (progDesc "Create a key"))
         , command "list-keys" (info (helper <*> listKeysP) (progDesc "List keys"))
         , command "delete-key" (info (helper <*> deleteKeyP) (progDesc "Delete a key"))
+        , command "create-bucket" (info (helper <*> createBucketP) (progDesc "Create a bucket"))
         ])
    where
     createKeyP = CreateKey
@@ -54,6 +59,20 @@ get =
       <*> optional (option str (long "start-key-id" <> metavar "KEY_ID"))
     deleteKeyP = DeleteKey
       <$> argument str (metavar "KEY_ID")
+    createBucketP = CreateBucket
+      <$> argument bucketType (metavar "TYPE" <> help "'all-public', 'all-private', or 'snapshot'")
+      <*> argument str (metavar "NAME")
+     where
+      bucketType =
+        eitherReader $ \case
+          "all-private" ->
+            pure B2.AllPrivate
+          "all-public" ->
+            pure B2.AllPublic
+          "snapshot" ->
+            pure B2.Snapshot
+          _ ->
+            Left "Unknown bucket type"
 
 csv :: IsString str => ReadM [str]
 csv =

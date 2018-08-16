@@ -30,6 +30,9 @@ run Cfg {..} cmd = do
     DeleteKey keyID -> do
       res <- B2.b2_delete_key token keyID man
       either dieJson printJson res
+    CreateBucket type_ name -> do
+      res <- B2.b2_create_bucket token name type_ Nothing Nothing Nothing man
+      either dieJson printJson res
 
 dieE :: Aeson.ToJSON e => Either e a -> IO a
 dieE =

@@ -16,23 +16,24 @@ import           Control.Applicative (empty)
 import           Data.Aeson ((.:), (.=))
 import qualified Data.Aeson as Aeson
 import           Data.Int (Int64)
+import           Data.HashMap.Strict (HashMap)
 import           Data.List.NonEmpty (NonEmpty)
 import           Data.Text (Text)
 
 import           B2.ID (ID(..))
 
 
-data Bucket info = Bucket
+data Bucket = Bucket
   { accountID      :: Text
   , bucketID       :: ID Bucket
   , bucketName     :: Text
   , bucketType     :: BucketType
-  , bucketInfo     :: info
+  , bucketInfo     :: HashMap Text Text
   , lifecycleRules :: [LifecycleRule]
   , revision       :: Int64
   } deriving (Show, Eq)
 
-instance Aeson.FromJSON info => Aeson.FromJSON (Bucket info) where
+instance Aeson.FromJSON Bucket where
   parseJSON =
     Aeson.withObject "Bucket" $ \o -> do
       accountID <- o .: "accountId"
@@ -44,13 +45,25 @@ instance Aeson.FromJSON info => Aeson.FromJSON (Bucket info) where
       revision <- o .: "revision"
       pure Bucket {..}
 
+instance Aeson.ToJSON Bucket where
+  toJSON Bucket {..} =
+    Aeson.object
+      [ "accountId" .= accountID
+      , "bucketId" .= bucketID
+      , "bucketName" .= bucketName
+      , "bucketType" .= bucketType
+      , "bucketInfo" .= bucketInfo
+      , "lifecycleRules" .= lifecycleRules
+      , "revision" .= revision
+      ]
+
 class HasBucketID t where
   getBucketID :: t -> ID Bucket
 
 instance bucket ~ Bucket => HasBucketID (ID bucket) where
   getBucketID x = x
 
-instance HasBucketID (Bucket info) where
+instance HasBucketID Bucket where
   getBucketID = bucketID
 
 data BucketType
@@ -119,10 +132,10 @@ instance Aeson.ToJSON CorsRule where
       , "maxAgeSecods" .= maxAgeSecods
       ]
 
-newtype Buckets info = Buckets { unBuckets :: [Bucket info] }
+newtype Buckets = Buckets { unBuckets :: [Bucket] }
     deriving (Show, Eq)
 
-instance Aeson.FromJSON info => Aeson.FromJSON (Buckets info) where
+instance Aeson.FromJSON Buckets where
   parseJSON =
     Aeson.withObject "Buckets" $ \o -> do
       unBuckets <- o .: "buckets"

@@ -29,7 +29,7 @@ import           Data.ByteString (ByteString)
 import qualified Data.ByteString.Lazy as Lazy (ByteString)
 import           Data.Conduit (ConduitT)
 import           Data.Int (Int64)
-import qualified Data.HashMap.Strict as HashMap
+import           Data.HashMap.Strict (HashMap)
 import           Data.Maybe (fromMaybe)
 import           Data.Monoid ((<>))
 import           Data.String (fromString)
@@ -112,20 +112,18 @@ b2_cancel_large_file env file man = do
   parseResponse res
 
 b2_create_bucket
-  :: ( Aeson.FromJSON info
-     , Aeson.ToJSON info
-     , HasBaseUrl env
+  :: ( HasBaseUrl env
      , HasAccountID env
      , HasAuthorizationToken env
      )
   => env
   -> Text
   -> BucketType
-  -> Maybe info
+  -> Maybe (HashMap Text Text)
   -> Maybe [CorsRule]
   -> Maybe [LifecycleRule]
   -> Http.Manager
-  -> IO (Either Error (Bucket info))
+  -> IO (Either Error Bucket)
 b2_create_bucket env name type_ info cors lifecycle man = do
   req <- tokenRequest env "/b2api/v1/b2_create_bucket"
   res <- Http.httpLbs req
@@ -169,8 +167,7 @@ b2_create_key env capabilities name durationS restrictions man = do
   parseResponse res
 
 b2_delete_bucket
-  :: ( Aeson.FromJSON info
-     , HasBucketID bucketID
+  :: ( HasBucketID bucketID
      , HasBaseUrl env
      , HasAccountID env
      , HasAuthorizationToken env
@@ -178,7 +175,7 @@ b2_delete_bucket
   => env
   -> bucketID
   -> Http.Manager
-  -> IO (Either Error (Bucket info))
+  -> IO (Either Error Bucket)
 b2_delete_bucket env id man = do
   req <- tokenRequest env "/b2api/v1/b2_delete_bucket"
   res <- Http.httpLbs req
@@ -388,8 +385,7 @@ b2_hide_file env bucket fileName man = do
   parseResponse res
 
 b2_list_buckets
-  :: ( Aeson.FromJSON info
-     , HasBaseUrl env
+  :: ( HasBaseUrl env
      , HasAccountID env
      , HasAuthorizationToken env
      )
@@ -398,7 +394,7 @@ b2_list_buckets
   -> Maybe Text
   -> Maybe [BucketType]
   -> Http.Manager
-  -> IO (Either Error [Bucket info])
+  -> IO (Either Error [Bucket])
 b2_list_buckets env bucket name types man = do
   req <- tokenRequest env "/b2api/v1/b2_list_buckets"
   res <- Http.httpLbs req
@@ -546,7 +542,7 @@ b2_start_large_file
   -> bucketID
   -> Text
   -> Text
-  -> Maybe [(Text, Text)]
+  -> Maybe (HashMap Text Text)
   -> Http.Manager
   -> IO (Either Error LargeFile)
 b2_start_large_file env bucket fileName contentType info man = do
@@ -556,7 +552,7 @@ b2_start_large_file env bucket fileName contentType info man = do
         { bucketId: #{getBucketID bucket}
         , fileName: #{fileName}
         , contentType: #{contentType}
-        , fileInfo: #{fmap HashMap.fromList info}
+        , fileInfo: #{info}
         }
       |])
     } man
@@ -564,8 +560,6 @@ b2_start_large_file env bucket fileName contentType info man = do
 
 b2_update_bucket
   :: ( HasBucketID bucketID
-     , Aeson.FromJSON info
-     , Aeson.ToJSON info
      , HasBaseUrl env
      , HasAccountID env
      , HasAuthorizationToken env
@@ -573,12 +567,12 @@ b2_update_bucket
   => env
   -> bucketID
   -> Maybe BucketType
-  -> Maybe info
+  -> Maybe (HashMap Text Text)
   -> Maybe [CorsRule]
   -> Maybe [LifecycleRule]
   -> Maybe Int64
   -> Http.Manager
-  -> IO (Either Error (Bucket info))
+  -> IO (Either Error Bucket)
 b2_update_bucket env bucket type_ info cors lifecycle revision man = do
   req <- tokenRequest env "/b2api/v1/b2_update_bucket"
   res <- Http.httpLbs req
