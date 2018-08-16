@@ -5,9 +5,9 @@ module Opts
   , get
   ) where
 
+import           Control.Monad ((<=<))
 import           Options.Applicative
 import           Data.Int (Int64)
-import           Data.String (IsString(..))
 import           Data.Text (Text)
 import qualified Env
 
@@ -31,6 +31,10 @@ data Cmd
   | CreateBucket
       B2.BucketType
       Text
+  | ListBuckets
+      (Maybe (B2.ID B2.Bucket))
+      (Maybe Text)
+      (Maybe [B2.BucketType])
     deriving (Show, Eq)
 
 get :: IO Cmd
@@ -46,10 +50,11 @@ get =
         , command "list-keys" (info (helper <*> listKeysP) (progDesc "List keys"))
         , command "delete-key" (info (helper <*> deleteKeyP) (progDesc "Delete a key"))
         , command "create-bucket" (info (helper <*> createBucketP) (progDesc "Create a bucket"))
+        , command "list-buckets" (info (helper <*> listBucketsP) (progDesc "List buckets"))
         ])
    where
     createKeyP = CreateKey
-      <$> argument csv (metavar "CAPABILITIES")
+      <$> argument (csv Env.str) (metavar "CAPABILITIES")
       <*> argument str (metavar "NAME")
       <*> argument auto (metavar "DURATION_S")
       <*> optional (option str (long "bucket" <> metavar "BUCKET"))
@@ -60,20 +65,27 @@ get =
     deleteKeyP = DeleteKey
       <$> argument str (metavar "KEY_ID")
     createBucketP = CreateBucket
-      <$> argument bucketType (metavar "TYPE" <> help "'all-public', 'all-private', or 'snapshot'")
+      <$> argument
+            (eitherReader bucketType)
+            (metavar "TYPE" <> help "'all-public', 'all-private', or 'snapshot'")
       <*> argument str (metavar "NAME")
+    listBucketsP = ListBuckets
+      <$> optional (option str (long "id" <> metavar "ID"))
+      <*> optional (option str (long "name" <> metavar "NAME"))
+      <*> optional (option (csv bucketType) (long "types" <> metavar "TYPES"))
      where
-      bucketType =
-        eitherReader $ \case
-          "all-private" ->
-            pure B2.AllPrivate
-          "all-public" ->
-            pure B2.AllPublic
-          "snapshot" ->
-            pure B2.Snapshot
-          _ ->
-            Left "Unknown bucket type"
 
-csv :: IsString str => ReadM [str]
-csv =
-  eitherReader (fmap (map fromString) . Env.splitOn ',')
+csv :: Env.Reader String a -> ReadM [a]
+csv r =
+  eitherReader (traverse r <=< Env.splitOn ',')
+
+bucketType :: Env.Reader String B2.BucketType
+bucketType = \case
+  "all-private" ->
+    pure B2.AllPrivate
+  "all-public" ->
+    pure B2.AllPublic
+  "snapshot" ->
+    pure B2.Snapshot
+  _ ->
+    Left "Unknown bucket type"
