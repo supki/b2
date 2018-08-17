@@ -36,6 +36,9 @@ run Cfg {..} cmd = do
     ListBuckets id_ name type_ -> do
       res <- B2.b2_list_buckets token id_ name type_ man
       either dieJson printJson res
+    DeleteBucket id_ -> do
+      res <- B2.b2_delete_bucket token id_ man
+      either dieJson printJson res
 
 dieE :: Aeson.ToJSON e => Either e a -> IO a
 dieE =
