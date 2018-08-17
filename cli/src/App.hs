@@ -4,10 +4,12 @@ module App
   ( run
   ) where
 
-import           Control.Monad.Trans.Resource (runResourceT)
+import           Control.Monad.IO.Class (MonadIO(..))
+import           Control.Monad.Trans.Resource (MonadResource, runResourceT)
 import qualified Data.Aeson as Aeson
-import           Data.Conduit ((.|), runConduit)
+import           Data.Conduit (ConduitT, (.|), runConduit)
 import qualified Data.Conduit.Binary as CB
+import           Data.ByteString (ByteString)
 import qualified Data.ByteString.Lazy as Lazy (ByteString)
 import qualified Data.ByteString.Lazy.Char8 as ByteString.Lazy
 import qualified Network.HTTP.Conduit as Http
@@ -37,17 +39,17 @@ run Cfg {..} cmd = do
       dieP (B2.b2_list_buckets token id_ name type_ man)
     DeleteBucket id_ ->
       dieP (B2.b2_delete_bucket token id_ man)
-    UploadFile bucket filename filepath -> do
+    UploadFile bucket filename filepath contentType -> do
       uploadUrl <- dieW (B2.b2_get_upload_url token bucket man)
       contents <- fileContents filepath
-      dieP (B2.b2_upload_file uploadUrl filename Nothing contents [] man)
+      dieP (B2.b2_upload_file uploadUrl filename contentType contents [] man)
     ListFileNames bucket startFileName maxCount prefix delimiter ->
       dieP (B2.b2_list_file_names token bucket startFileName maxCount prefix delimiter man)
-    DownloadById file firstByte lastByte -> do
+    DownloadById file filepath firstByte lastByte -> do
       runResourceT $ do
-        source <- B2.b2_download_file_by_id token (firstByte, lastByte) file man
+        source <- dieW (B2.b2_download_file_by_id token (firstByte, lastByte) file man)
         runConduit $
-          source .| CB.sinkHandle IO.stdout
+          source .| sinkFile filepath
 
 fileContents :: FilePath -> IO Lazy.ByteString
 fileContents = \case
@@ -56,7 +58,14 @@ fileContents = \case
   path ->
     ByteString.Lazy.readFile path
 
-dieW :: Aeson.ToJSON e => IO (Either e a) -> IO a
+sinkFile :: MonadResource m => FilePath -> ConduitT ByteString o m ()
+sinkFile = \case
+  "-" ->
+    CB.sinkHandle IO.stdout
+  path ->
+    CB.sinkFile path
+
+dieW :: (MonadIO m, Aeson.ToJSON e) => m (Either e a) -> m a
 dieW x = do
   res <- x
   either dieJson pure res
@@ -66,8 +75,8 @@ dieP x = do
   res <- x
   either dieJson printJson res
 
-dieJson :: Aeson.ToJSON e => e -> IO a
-dieJson err = do
+dieJson :: (MonadIO m, Aeson.ToJSON e) => e -> m a
+dieJson err = liftIO $ do
   hPrintJson IO.stderr err
   exitFailure
 

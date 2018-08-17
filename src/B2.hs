@@ -4,6 +4,7 @@
 {-# LANGUAGE QuasiQuotes #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE StrictData #-}
+{-# LANGUAGE TypeFamilies #-}
 module B2
   ( module B2.AuthorizationToken
   , module B2.Bucket
@@ -27,7 +28,9 @@ import           Data.Aeson.QQ (aesonQQ)
 import           Data.Bifunctor (bimap)
 import           Data.ByteString (ByteString)
 import qualified Data.ByteString.Lazy as Lazy (ByteString)
-import           Data.Conduit (ConduitT)
+import qualified Data.ByteString.Lazy as ByteString.Lazy
+import           Data.Conduit (ConduitT, (.|), runConduit)
+import qualified Data.Conduit.List as CL
 import           Data.Int (Int64)
 import           Data.HashMap.Strict (HashMap)
 import           Data.Maybe (fromMaybe)
@@ -90,7 +93,7 @@ b2_authorize_account url keyID applicationKey man = do
   res <- Http.httpLbs req
     { Http.requestBody=Http.RequestBodyLBS "{}"
     } man
-  parseResponse res
+  parseResponseJson res
 
 b2_cancel_large_file
   :: ( HasFileID fileID
@@ -109,7 +112,7 @@ b2_cancel_large_file env file man = do
         }
       |])
     } man
-  parseResponse res
+  parseResponseJson res
 
 b2_create_bucket
   :: ( HasBaseUrl env
@@ -137,7 +140,7 @@ b2_create_bucket env name type_ info cors lifecycle man = do
         }
       |])
     } man
-  parseResponse res
+  parseResponseJson res
 
 b2_create_key
   :: ( HasBaseUrl env
@@ -164,7 +167,7 @@ b2_create_key env capabilities name durationS restrictions man = do
         }
       |])
     } man
-  parseResponse res
+  parseResponseJson res
 
 b2_delete_bucket
   :: ( HasBucketID bucketID
@@ -185,7 +188,7 @@ b2_delete_bucket env id man = do
         }
       |])
     } man
-  parseResponse res
+  parseResponseJson res
 
 b2_delete_file_version
   :: ( HasFileID fileID
@@ -207,7 +210,7 @@ b2_delete_file_version env id name man = do
         }
       |])
     } man
-  parseResponse res
+  parseResponseJson res
 
 b2_delete_key
   :: ( HasKeyID keyID
@@ -226,7 +229,7 @@ b2_delete_key env id man = do
         }
       |])
     } man
-  parseResponse res
+  parseResponseJson res
 
 b2_download_file_by_id
   :: ( HasFileID fileID
@@ -238,11 +241,11 @@ b2_download_file_by_id
   -> (Maybe Int64, Maybe Int64)
   -> fileID
   -> Http.Manager
-  -> m (ConduitT i ByteString m ())
+  -> m (Either Error (ConduitT () ByteString m ()))
 b2_download_file_by_id env range fileID man = do
   req <- downloadByIDRequest env range fileID
   res <- Http.http req man
-  pure (Http.responseBody res)
+  parseResponseConduit res
 
 b2_download_file_by_name
   :: ( HasDownloadUrl env
@@ -254,11 +257,11 @@ b2_download_file_by_name
   -> Text
   -> Text
   -> Http.Manager
-  -> m (ConduitT i ByteString m ())
+  -> m (Either Error (ConduitT () ByteString m ()))
 b2_download_file_by_name env range bucketName fileName man = do
   req <- downloadByNameRequest env range bucketName fileName
   res <- Http.http req man
-  pure (Http.responseBody res)
+  parseResponseConduit res
 
 b2_finish_large_file
   :: ( HasFileID fileID
@@ -279,7 +282,7 @@ b2_finish_large_file env file partSha1Array man = do
         }
       |])
     } man
-  parseResponse res
+  parseResponseJson res
 
 b2_get_download_authorization
   :: ( HasBucketID bucketID
@@ -304,7 +307,7 @@ b2_get_download_authorization env bucket fileNamePrefix durationS disposition ma
         }
       |])
     } man
-  parseResponse res
+  parseResponseJson res
 
 b2_get_file_info
   :: ( HasFileID fileID
@@ -323,7 +326,7 @@ b2_get_file_info env id man = do
         }
       |])
     } man
-  parseResponse res
+  parseResponseJson res
 
 b2_get_upload_url
   :: ( HasBucketID bucketID
@@ -342,7 +345,7 @@ b2_get_upload_url env id man = do
         }
       |])
     } man
-  parseResponse res
+  parseResponseJson res
 
 b2_get_upload_part_url
   :: ( HasFileID fileID
@@ -361,7 +364,7 @@ b2_get_upload_part_url env id man = do
         }
       |])
     } man
-  parseResponse res
+  parseResponseJson res
 
 b2_hide_file
   :: ( HasBucketID bucketID
@@ -382,7 +385,7 @@ b2_hide_file env bucket fileName man = do
         }
       |])
     } man
-  parseResponse res
+  parseResponseJson res
 
 b2_list_buckets
   :: ( HasBaseUrl env
@@ -406,7 +409,7 @@ b2_list_buckets env bucket name types man = do
         }
       |])
     } man
-  fmap (fmap unBuckets) (parseResponse res)
+  fmap (fmap unBuckets) (parseResponseJson res)
 
 b2_list_file_names
   :: ( HasBucketID bucketID
@@ -433,7 +436,7 @@ b2_list_file_names env id startName maxCount prefix delimiter man = do
         }
       |])
     } man
-  parseResponse res
+  parseResponseJson res
 
 b2_list_file_versions
   :: ( HasBucketID bucketID
@@ -461,7 +464,7 @@ b2_list_file_versions env id startName maxCount prefix delimiter man = do
         }
       |])
     } man
-  parseResponse res
+  parseResponseJson res
 
 b2_list_keys
   :: ( HasBaseUrl env
@@ -483,7 +486,7 @@ b2_list_keys env maxKeyCount startApplicationKeyID man = do
         }
       |])
     } man
-  parseResponse res
+  parseResponseJson res
 
 b2_list_parts
   :: ( HasFileID fileID
@@ -506,7 +509,7 @@ b2_list_parts env file startPartNumber maxCount man = do
         }
       |])
     } man
-  parseResponse res
+  parseResponseJson res
 
 b2_list_unfinished_large_files
   :: ( HasBucketID bucketID
@@ -531,7 +534,7 @@ b2_list_unfinished_large_files env bucket namePrefix startFileID maxCount man = 
         }
       |])
     } man
-  parseResponse res
+  parseResponseJson res
 
 b2_start_large_file
   :: ( HasBucketID bucketID
@@ -556,7 +559,7 @@ b2_start_large_file env bucket fileName contentType info man = do
         }
       |])
     } man
-  parseResponse res
+  parseResponseJson res
 
 b2_update_bucket
   :: ( HasBucketID bucketID
@@ -587,7 +590,7 @@ b2_update_bucket env bucket type_ info cors lifecycle revision man = do
         }
       |])
     } man
-  parseResponse res
+  parseResponseJson res
 
 b2_upload_file
   :: ( HasUploadUrl env
@@ -603,7 +606,7 @@ b2_upload_file
 b2_upload_file env name contentType content info man = do
   req <- uploadRequest env name content contentType info
   res <- Http.httpLbs req man
-  parseResponse res
+  parseResponseJson res
 
 b2_upload_part
   :: ( HasUploadPartUrl env
@@ -617,7 +620,7 @@ b2_upload_part
 b2_upload_part env idx part man = do
   req <- uploadPartRequest env idx part
   res <- Http.httpLbs req man
-  parseResponse res
+  parseResponseJson res
 
 basicRequest
   :: HasBaseUrl env
@@ -748,17 +751,34 @@ downloadRequest env (from, to) method = liftIO $ do
   genRange =
     fromString (printf "bytes=%d-%s" (fromMaybe 0 from) (maybe "" show to))
 
-parseResponse
+parseResponseJson
   :: (Aeson.FromJSON err, Aeson.FromJSON a)
   => Http.Response Lazy.ByteString
   -> IO (Either err a)
-parseResponse res = do
-  if 200 <= statusCode && statusCode < 300
-    then fmap Right (parseJsonEx body)
-    else fmap Left (parseJsonEx body)
+parseResponseJson =
+  parseResponse (fmap Left . parseJsonEx) (fmap Right . parseJsonEx)
+
+parseResponseConduit
+  :: (MonadIO m, Aeson.FromJSON err, body ~ (ConduitT () ByteString m ()))
+  => Http.Response body
+  -> m (Either err body)
+parseResponseConduit =
+  parseResponse onErr (pure . Right)
  where
-  body = Http.responseBody res
-  Http.Status {statusCode} = Http.responseStatus res
+  onErr body = do
+    bytes <- fmap ByteString.Lazy.fromChunks (runConduit (body .| CL.consume))
+    liftIO (fmap Left (parseJsonEx bytes))
+
+parseResponse :: (body -> r) -> (body -> r) -> Http.Response body -> r
+parseResponse onErr onOk res = do
+  if 200 <= statusCode && statusCode < 300
+    then onOk body
+    else onErr body
+ where
+  body =
+    Http.responseBody res
+  Http.Status {statusCode} =
+    Http.responseStatus res
 
 parseJsonEx :: Aeson.FromJSON a => Lazy.ByteString -> IO a
 parseJsonEx bytes =

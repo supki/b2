@@ -41,6 +41,7 @@ data Cmd
       (B2.ID B2.Bucket)
       Text
       FilePath
+      (Maybe Text)
   | ListFileNames
       (B2.ID B2.Bucket)
       (Maybe Text)
@@ -49,6 +50,7 @@ data Cmd
       (Maybe Char)
   | DownloadById
       (B2.ID B2.File)
+      FilePath
       (Maybe Int64)
       (Maybe Int64)
     deriving (Show, Eq)
@@ -101,6 +103,7 @@ get =
       <$> argument str (metavar "BUCKET")
       <*> argument str (metavar "FILENAME")
       <*> argument str (metavar "FILEPATH")
+      <*> optional (option str (long "content-type" <> metavar "CONTENT-TYPE"))
     listFileNamesP = ListFileNames
       <$> argument str (metavar "BUCKET")
       <*> optional (option str (long "start-file-name" <> metavar "FILENAME"))
@@ -109,6 +112,7 @@ get =
       <*> optional (option char (long "delimiter" <> metavar "CHARACTER"))
     downloadByIdP = DownloadById
       <$> argument str (metavar "FILE")
+      <*> argument str (metavar "FILEPATH")
       <*> optional (option auto (long "first-byte"))
       <*> optional (option auto (long "last-byte"))
 
