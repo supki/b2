@@ -12,7 +12,7 @@ module B2.File
   , Files(..)
   ) where
 
-import           Data.Aeson ((.:), (.:?))
+import           Data.Aeson ((.:), (.:?), (.=))
 import qualified Data.Aeson as Aeson
 import           Data.Int (Int64)
 import           Data.HashMap.Strict (HashMap)
@@ -43,6 +43,19 @@ instance Aeson.FromJSON File where
       action <- o .: "action"
       uploadTimestamp <- o .: "uploadTimestamp"
       pure File {..}
+
+instance Aeson.ToJSON File where
+  toJSON File {fileIDs=FileIDs {..}, ..}=
+    Aeson.object
+      [ "fileID" .= fileID
+      , "fileName" .= fileName
+      , "contentLength" .= contentLength
+      , "contentSha1" .= contentSha1
+      , "contentType" .= contentType
+      , "fileInfo" .= fileInfo
+      , "action" .= action
+      , "uploadTimestamp" .= uploadTimestamp
+      ]
 
 data FileIDs = FileIDs
   { fileID   :: ID File

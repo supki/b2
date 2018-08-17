@@ -37,6 +37,10 @@ data Cmd
       (Maybe [B2.BucketType])
   | DeleteBucket
       (B2.ID B2.Bucket)
+  | UploadFile
+      (B2.ID B2.Bucket)
+      Text
+      FilePath
     deriving (Show, Eq)
 
 get :: IO Cmd
@@ -54,6 +58,7 @@ get =
         , command "create-bucket" (info (helper <*> createBucketP) (progDesc "Create a bucket"))
         , command "list-buckets" (info (helper <*> listBucketsP) (progDesc "List buckets"))
         , command "delete-bucket" (info (helper <*> deleteBucketP) (progDesc "Delete a bucket"))
+        , command "upload-file" (info (helper <*> uploadFileP) (progDesc "Upload file"))
         ])
    where
     createKeyP = CreateKey
@@ -78,6 +83,10 @@ get =
       <*> optional (option (csv bucketType) (long "types" <> metavar "TYPES"))
     deleteBucketP = DeleteBucket
       <$> argument str (metavar "ID")
+    uploadFileP = UploadFile
+      <$> argument str (metavar "BUCKET")
+      <*> argument str (metavar "FILENAME")
+      <*> argument str (metavar "FILEPATH")
 
 csv :: Env.Reader String a -> ReadM [a]
 csv r =

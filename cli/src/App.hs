@@ -18,31 +18,34 @@ import qualified B2
 run :: Cfg -> Cmd -> IO ()
 run Cfg {..} cmd = do
   man <- Http.newManager Http.tlsManagerSettings
-  tokenE <- B2.b2_authorize_account B2.defaultBaseUrl cfgKeyID cfgApplicationKey man
-  token <- dieE tokenE
+  token <- dieW (B2.b2_authorize_account B2.defaultBaseUrl cfgKeyID cfgApplicationKey man)
   case cmd of
-    CreateKey capabilities name durationS bucket prefix -> do
-      res <- B2.b2_create_key token capabilities name durationS (fmap (\b -> (b, prefix)) bucket) man
-      either dieJson printJson res
-    ListKeys maxCount startKeyID -> do
-      res <- B2.b2_list_keys token maxCount startKeyID man
-      either dieJson printJson res
-    DeleteKey keyID -> do
-      res <- B2.b2_delete_key token keyID man
-      either dieJson printJson res
-    CreateBucket type_ name -> do
-      res <- B2.b2_create_bucket token name type_ Nothing Nothing Nothing man
-      either dieJson printJson res
-    ListBuckets id_ name type_ -> do
-      res <- B2.b2_list_buckets token id_ name type_ man
-      either dieJson printJson res
-    DeleteBucket id_ -> do
-      res <- B2.b2_delete_bucket token id_ man
-      either dieJson printJson res
+    CreateKey capabilities name durationS bucket prefix ->
+      dieP (B2.b2_create_key token capabilities name durationS (fmap (\b -> (b, prefix)) bucket) man)
+    ListKeys maxCount startKeyID ->
+      dieP (B2.b2_list_keys token maxCount startKeyID man)
+    DeleteKey keyID ->
+      dieP (B2.b2_delete_key token keyID man)
+    CreateBucket type_ name ->
+      dieP (B2.b2_create_bucket token name type_ Nothing Nothing Nothing man)
+    ListBuckets id_ name type_ ->
+      dieP (B2.b2_list_buckets token id_ name type_ man)
+    DeleteBucket id_ ->
+      dieP (B2.b2_delete_bucket token id_ man)
+    UploadFile bucket filename filepath -> do
+      uploadUrl <- dieW (B2.b2_get_upload_url token bucket man)
+      contents <- ByteString.Lazy.readFile filepath
+      dieP (B2.b2_upload_file uploadUrl filename Nothing contents [] man)
 
-dieE :: Aeson.ToJSON e => Either e a -> IO a
-dieE =
-  either dieJson pure
+dieW :: Aeson.ToJSON e => IO (Either e a) -> IO a
+dieW x = do
+  res <- x
+  either dieJson pure res
+
+dieP :: (Aeson.ToJSON e, Aeson.ToJSON a) => IO (Either e a) -> IO ()
+dieP x = do
+  res <- x
+  either dieJson printJson res
 
 dieJson :: Aeson.ToJSON e => e -> IO a
 dieJson err = do
