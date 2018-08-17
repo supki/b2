@@ -418,7 +418,7 @@ b2_list_file_names
   -> Maybe Text
   -> Maybe Int64
   -> Maybe Text
-  -> Maybe Text
+  -> Maybe Char
   -> Http.Manager
   -> IO (Either Error Files)
 b2_list_file_names env id startName maxCount prefix delimiter man = do
@@ -453,7 +453,7 @@ b2_list_file_versions env id startName maxCount prefix delimiter man = do
   res <- Http.httpLbs req
     { Http.requestBody=Http.RequestBodyLBS (Aeson.encode [aesonQQ|
         { bucketId: #{getBucketID id}
-        , startFileName: #{startName}
+        , startFileName: #{fmap fst startName}
         , startFileId: #{join (fmap snd startName)}
         , maxFileCount: #{maxCount}
         , prefix: #{prefix}

@@ -2,7 +2,7 @@
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: a306d374955ca7b78d2b5aad2abbb17ae35bab8d8177ba3310e2501efa0b35cb
+-- hash: bdc5d2a78180377fb605c785e070bc8a7d1d5d534331abef7466e8b10cc5112f
 
 name:           b2-cli
 version:        1.0.0
@@ -33,9 +33,12 @@ library
     , b2
     , base >=4.7 && <5
     , bytestring
+    , conduit
+    , conduit-extra
     , envparse
     , http-conduit
     , optparse-applicative
+    , resourcet
     , text
   exposed-modules:
       App

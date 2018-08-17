@@ -109,3 +109,11 @@ instance Aeson.FromJSON Files where
       nextFileName <- o .: "nextFileName"
       nextFileId <- o .:? "nextFileId"
       pure Files {..}
+
+instance Aeson.ToJSON Files where
+  toJSON Files {..} =
+    Aeson.object
+      [ "files" .= files
+      , "nextFileName" .= nextFileName
+      , "nextFileId" .= nextFileId
+      ]

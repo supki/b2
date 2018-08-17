@@ -41,6 +41,16 @@ data Cmd
       (B2.ID B2.Bucket)
       Text
       FilePath
+  | ListFileNames
+      (B2.ID B2.Bucket)
+      (Maybe Text)
+      (Maybe Int64)
+      (Maybe Text)
+      (Maybe Char)
+  | DownloadById
+      (B2.ID B2.File)
+      (Maybe Int64)
+      (Maybe Int64)
     deriving (Show, Eq)
 
 get :: IO Cmd
@@ -52,15 +62,19 @@ get =
   parser =
     subparser
       (mconcat
-        [ command "create-key" (info (helper <*> createKeyP) (progDesc "Create a key"))
-        , command "list-keys" (info (helper <*> listKeysP) (progDesc "List keys"))
-        , command "delete-key" (info (helper <*> deleteKeyP) (progDesc "Delete a key"))
-        , command "create-bucket" (info (helper <*> createBucketP) (progDesc "Create a bucket"))
-        , command "list-buckets" (info (helper <*> listBucketsP) (progDesc "List buckets"))
-        , command "delete-bucket" (info (helper <*> deleteBucketP) (progDesc "Delete a bucket"))
-        , command "upload-file" (info (helper <*> uploadFileP) (progDesc "Upload file"))
+        [ cmd createKeyP     "create-key"      "Create a key"
+        , cmd listKeysP      "list-keys"       "List keys"
+        , cmd deleteKeyP     "delete-key"      "Delete a key"
+        , cmd createBucketP  "create-bucket"   "Create a bucket"
+        , cmd listBucketsP   "list-buckets"    "List buckets"
+        , cmd deleteBucketP  "delete-bucket"   "Delete a bucket"
+        , cmd uploadFileP    "upload-file"     "Upload file"
+        , cmd listFileNamesP "list-file-names" "List file names"
+        , cmd downloadByIdP  "download-by-id"  "Download a file by ID"
         ])
    where
+    cmd p name desc =
+      command name (info (helper <*> p) (progDesc desc))
     createKeyP = CreateKey
       <$> argument (csv Env.str) (metavar "CAPABILITIES")
       <*> argument str (metavar "NAME")
@@ -87,6 +101,24 @@ get =
       <$> argument str (metavar "BUCKET")
       <*> argument str (metavar "FILENAME")
       <*> argument str (metavar "FILEPATH")
+    listFileNamesP = ListFileNames
+      <$> argument str (metavar "BUCKET")
+      <*> optional (option str (long "start-file-name" <> metavar "FILENAME"))
+      <*> optional (option auto (long "max-count"))
+      <*> optional (option str (long "prefix" <> metavar "FILENAME"))
+      <*> optional (option char (long "delimiter" <> metavar "CHARACTER"))
+    downloadByIdP = DownloadById
+      <$> argument str (metavar "FILE")
+      <*> optional (option auto (long "first-byte"))
+      <*> optional (option auto (long "last-byte"))
+
+char :: ReadM Char
+char =
+  eitherReader $ \case
+    [x] ->
+      pure x
+    _ ->
+      Left "must be a one-character string"
 
 csv :: Env.Reader String a -> ReadM [a]
 csv r =

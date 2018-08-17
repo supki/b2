@@ -31,7 +31,10 @@ library:
     - envparse
     - http-conduit
     - optparse-applicative
+    - resourcet
     - text
+    - conduit
+    - conduit-extra
   source-dirs:
     src
   other-modules:
