@@ -48,6 +48,13 @@ data Cmd
       (Maybe Int64)
       (Maybe Text)
       (Maybe Char)
+  | ListFileVersions
+      (B2.ID B2.Bucket)
+      (Maybe Text)
+      (Maybe (B2.ID B2.File))
+      (Maybe Int64)
+      (Maybe Text)
+      (Maybe Char)
   | DownloadById
       (B2.ID B2.File)
       FilePath
@@ -64,15 +71,16 @@ get =
   parser =
     subparser
       (mconcat
-        [ cmd createKeyP     "create-key"      "Create a key"
-        , cmd listKeysP      "list-keys"       "List keys"
-        , cmd deleteKeyP     "delete-key"      "Delete a key"
-        , cmd createBucketP  "create-bucket"   "Create a bucket"
-        , cmd listBucketsP   "list-buckets"    "List buckets"
-        , cmd deleteBucketP  "delete-bucket"   "Delete a bucket"
-        , cmd uploadFileP    "upload-file"     "Upload file"
-        , cmd listFileNamesP "list-file-names" "List file names"
-        , cmd downloadByIdP  "download-by-id"  "Download a file by ID"
+        [ cmd createKeyP        "create-key"         "Create a key"
+        , cmd listKeysP         "list-keys"          "List keys"
+        , cmd deleteKeyP        "delete-key"         "Delete a key"
+        , cmd createBucketP     "create-bucket"      "Create a bucket"
+        , cmd listBucketsP      "list-buckets"       "List buckets"
+        , cmd deleteBucketP     "delete-bucket"      "Delete a bucket"
+        , cmd uploadFileP       "upload-file"        "Upload file"
+        , cmd listFileNamesP    "list-file-names"    "List file names"
+        , cmd listFileVersionsP "list-file-versions" "List file versions"
+        , cmd downloadByIdP     "download-by-id"     "Download a file by ID"
         ])
    where
     cmd p name desc =
@@ -107,6 +115,13 @@ get =
     listFileNamesP = ListFileNames
       <$> argument str (metavar "BUCKET")
       <*> optional (option str (long "start-file-name" <> metavar "FILENAME"))
+      <*> optional (option auto (long "max-count"))
+      <*> optional (option str (long "prefix" <> metavar "FILENAME"))
+      <*> optional (option char (long "delimiter" <> metavar "CHARACTER"))
+    listFileVersionsP = ListFileVersions
+      <$> argument str (metavar "BUCKET")
+      <*> optional (option str (long "start-file-name" <> metavar "FILENAME"))
+      <*> optional (option str (long "start-file-id" <> metavar "FILE"))
       <*> optional (option auto (long "max-count"))
       <*> optional (option str (long "prefix" <> metavar "FILENAME"))
       <*> optional (option char (long "delimiter" <> metavar "CHARACTER"))

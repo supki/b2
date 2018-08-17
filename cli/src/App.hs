@@ -45,6 +45,9 @@ run Cfg {..} cmd = do
       dieP (B2.b2_upload_file uploadUrl filename contentType contents [] man)
     ListFileNames bucket startFileName maxCount prefix delimiter ->
       dieP (B2.b2_list_file_names token bucket startFileName maxCount prefix delimiter man)
+    ListFileVersions bucket startFileName startFileId maxCount prefix delimiter -> do
+      let start = fmap (\n -> (n, startFileId)) startFileName
+      dieP (B2.b2_list_file_versions token bucket start maxCount prefix delimiter man)
     DownloadById file filepath firstByte lastByte -> do
       runResourceT $ do
         source <- dieW (B2.b2_download_file_by_id token (firstByte, lastByte) file man)

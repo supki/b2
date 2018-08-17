@@ -448,7 +448,7 @@ b2_list_file_versions
   -> Maybe (Text, Maybe (ID File))
   -> Maybe Int64
   -> Maybe Text
-  -> Maybe Text
+  -> Maybe Char
   -> Http.Manager
   -> IO (Either Error Files)
 b2_list_file_versions env id startName maxCount prefix delimiter man = do
