@@ -52,6 +52,8 @@ run Cfg {..} cmd = do
       dieP (B2.list_file_versions token bucket start maxCount prefix delimiter man)
     GetFileInfo file ->
       dieP (B2.get_file_info token file man)
+    GetDownloadAuth bucket prefix durationS ->
+      dieP (B2.get_download_authorization token bucket prefix durationS Nothing man)
     DownloadById file path firstByte lastByte -> do
       download (dieW (B2.download_file_by_id token (firstByte, lastByte) file man)) path
     DownloadByName bucket filename path firstByte lastByte -> do

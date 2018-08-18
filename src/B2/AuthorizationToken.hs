@@ -10,7 +10,7 @@ module B2.AuthorizationToken
   , DownloadAuthorization(..)
   ) where
 
-import           Data.Aeson ((.:))
+import           Data.Aeson ((.:), (.=))
 import qualified Data.Aeson as Aeson
 import           Data.Int (Int64)
 import           Data.String (IsString)
@@ -23,7 +23,7 @@ import           B2.Url (BaseUrl, HasBaseUrl(..), DownloadUrl, HasDownloadUrl(..
 
 
 newtype AuthorizationToken = AuthorizationToken { unAuthorizationToken :: Text }
-    deriving (Show, Eq, IsString, Aeson.FromJSON)
+    deriving (Show, Eq, IsString, Aeson.FromJSON, Aeson.ToJSON)
 
 class HasAuthorizationToken t where
   getAuthorizationToken :: t -> AuthorizationToken
@@ -44,6 +44,14 @@ instance Aeson.FromJSON DownloadAuthorization where
       bucketID <- o .: "bucketId"
       fileNamePrefix <- o .: "fileNamePrefix"
       pure DownloadAuthorization {..}
+
+instance Aeson.ToJSON DownloadAuthorization where
+  toJSON DownloadAuthorization {..} =
+    Aeson.object
+      [ "authorizationToken" .= authorizationToken
+      , "bucketId" .= bucketID
+      , "fileNamePrefix" .= fileNamePrefix
+      ]
 
 instance HasAuthorizationToken DownloadAuthorization where
   getAuthorizationToken = authorizationToken
