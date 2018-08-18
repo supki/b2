@@ -69,6 +69,13 @@ instance Aeson.FromJSON FileIDs where
       fileName <- o .: "fileName"
       pure FileIDs {..}
 
+instance Aeson.ToJSON FileIDs where
+  toJSON FileIDs {..} =
+    Aeson.object
+      [ "fileId" .= fileID
+      , "fileName" .= fileName
+      ]
+
 class HasFileID t where
   getFileID :: t -> ID File
 

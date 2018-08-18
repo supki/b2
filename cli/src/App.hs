@@ -57,6 +57,8 @@ run Cfg {..} cmd = do
           source .| sinkFile filepath
     HideFile bucket filename ->
       dieP (B2.hide_file token bucket filename man)
+    DeleteFileVersion filename file ->
+      dieP (B2.delete_file_version token filename file man)
 
 sinkFile :: MonadResource m => FilePath -> ConduitT ByteString o m ()
 sinkFile = \case

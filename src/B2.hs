@@ -194,22 +194,22 @@ delete_bucket env id man = do
   parseResponseJson res
 
 delete_file_version
-  :: ( HasFileID fileID
-     , HasFileName fileName
+  :: ( HasFileName fileName
+     , HasFileID fileID
      , HasBaseUrl env
      , HasAuthorizationToken env
      )
   => env
-  -> fileID
   -> fileName
+  -> fileID
   -> Http.Manager
   -> IO (Either Error FileIDs)
-delete_file_version env id name man = do
+delete_file_version env name id man = do
   req <- tokenRequest env "/b2api/v1/b2_delete_file_version"
   res <- Http.httpLbs req
     { Http.requestBody=Http.RequestBodyLBS (Aeson.encode [aesonQQ|
-        { fileId: #{getFileID id}
-        , fileName: #{getFileName name}
+        { fileName: #{getFileName name}
+        , fileId: #{getFileID id}
         }
       |])
     } man
