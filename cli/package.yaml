@@ -28,13 +28,14 @@ library:
     - aeson
     - b2
     - bytestring
+    - conduit
+    - conduit-extra
     - envparse
     - http-conduit
     - optparse-applicative
     - resourcet
     - text
-    - conduit
-    - conduit-extra
+    - unordered-containers
   source-dirs:
     src
   other-modules:

@@ -2,7 +2,7 @@
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: bdc5d2a78180377fb605c785e070bc8a7d1d5d534331abef7466e8b10cc5112f
+-- hash: 21f6b24a0a23b16dada30737177c90c5e6493a98abadf1c560e5d85ca54d1b0a
 
 name:           b2-cli
 version:        1.0.0
@@ -40,6 +40,7 @@ library
     , optparse-applicative
     , resourcet
     , text
+    , unordered-containers
   exposed-modules:
       App
       Cfg

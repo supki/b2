@@ -32,12 +32,14 @@ run Cfg {..} cmd = do
       dieP (B2.b2_list_keys token maxCount startKeyID man)
     DeleteKey keyID ->
       dieP (B2.b2_delete_key token keyID man)
-    CreateBucket type_ name ->
-      dieP (B2.b2_create_bucket token name type_ Nothing Nothing Nothing man)
-    ListBuckets id_ name type_ ->
-      dieP (B2.b2_list_buckets token id_ name type_ man)
-    DeleteBucket id_ ->
-      dieP (B2.b2_delete_bucket token id_ man)
+    CreateBucket type_ name info ->
+      dieP (B2.b2_create_bucket token name type_ info Nothing Nothing man)
+    ListBuckets bucket name type_ ->
+      dieP (B2.b2_list_buckets token bucket name type_ man)
+    UpdateBucket bucket type_ info revision ->
+      dieP (B2.b2_update_bucket token bucket type_ info Nothing Nothing revision man)
+    DeleteBucket bucket ->
+      dieP (B2.b2_delete_bucket token bucket man)
     UploadFile bucket filename filepath contentType -> do
       uploadUrl <- dieW (B2.b2_get_upload_url token bucket man)
       dieP (B2.b2_upload_file uploadUrl filename contentType filepath [] man)
@@ -51,6 +53,8 @@ run Cfg {..} cmd = do
         source <- dieW (B2.b2_download_file_by_id token (firstByte, lastByte) file man)
         runConduit $
           source .| sinkFile filepath
+    HideFile bucket filename ->
+      dieP (B2.b2_hide_file token bucket filename man)
 
 sinkFile :: MonadResource m => FilePath -> ConduitT ByteString o m ()
 sinkFile = \case

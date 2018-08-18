@@ -376,7 +376,7 @@ b2_hide_file
   -> bucketID
   -> Text
   -> Http.Manager
-  -> IO (Either Error DownloadAuthorization)
+  -> IO (Either Error File)
 b2_hide_file env bucket fileName man = do
   req <- tokenRequest env "/b2api/v1/b2_hide_file"
   res <- Http.httpLbs req

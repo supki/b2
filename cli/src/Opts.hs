@@ -7,6 +7,8 @@ module Opts
 
 import           Control.Monad ((<=<))
 import           Options.Applicative
+import           Data.HashMap.Strict (HashMap)
+import qualified Data.HashMap.Strict as HashMap
 import           Data.Int (Int64)
 import           Data.Text (Text)
 import qualified Env
@@ -31,10 +33,16 @@ data Cmd
   | CreateBucket
       B2.BucketType
       Text
+      (Maybe (HashMap Text Text))
   | ListBuckets
       (Maybe (B2.ID B2.Bucket))
       (Maybe Text)
       (Maybe [B2.BucketType])
+  | UpdateBucket
+      (B2.ID B2.Bucket)
+      (Maybe B2.BucketType)
+      (Maybe (HashMap Text Text))
+      (Maybe Int64)
   | DeleteBucket
       (B2.ID B2.Bucket)
   | UploadFile
@@ -60,6 +68,9 @@ data Cmd
       FilePath
       (Maybe Int64)
       (Maybe Int64)
+  | HideFile
+      (B2.ID B2.Bucket)
+      Text
     deriving (Show, Eq)
 
 get :: IO Cmd
@@ -74,13 +85,17 @@ get =
         [ cmd createKeyP        "create-key"         "Create a key"
         , cmd listKeysP         "list-keys"          "List keys"
         , cmd deleteKeyP        "delete-key"         "Delete a key"
+
         , cmd createBucketP     "create-bucket"      "Create a bucket"
         , cmd listBucketsP      "list-buckets"       "List buckets"
+        , cmd updateBucketP     "update-bucket"      "Update a bucket"
         , cmd deleteBucketP     "delete-bucket"      "Delete a bucket"
+
         , cmd uploadFileP       "upload-file"        "Upload file"
         , cmd listFileNamesP    "list-file-names"    "List file names"
         , cmd listFileVersionsP "list-file-versions" "List file versions"
         , cmd downloadByIdP     "download-by-id"     "Download a file by ID"
+        , cmd hideFileP         "hide-file"          "Hide a file"
         ])
    where
     cmd p name desc =
@@ -101,10 +116,19 @@ get =
             (eitherReader bucketType)
             (metavar "TYPE" <> help "'all-public', 'all-private', or 'snapshot'")
       <*> argument str (metavar "NAME")
+      <*> optional (option hashmap (long "info"))
     listBucketsP = ListBuckets
       <$> optional (option str (long "id" <> metavar "ID"))
       <*> optional (option str (long "name" <> metavar "NAME"))
       <*> optional (option (csv bucketType) (long "types" <> metavar "TYPES"))
+    updateBucketP = UpdateBucket
+      <$> argument str (metavar "BUCKET")
+      <*> optional
+            (option
+              (eitherReader bucketType)
+              (long "type" <> metavar "TYPE" <> help "'all-public', 'all-private', or 'snapshot'"))
+      <*> optional (option hashmap (long "info"))
+      <*> optional (option auto (long "revision"))
     deleteBucketP = DeleteBucket
       <$> argument str (metavar "ID")
     uploadFileP = UploadFile
@@ -130,6 +154,37 @@ get =
       <*> argument str (metavar "FILEPATH")
       <*> optional (option auto (long "first-byte"))
       <*> optional (option auto (long "last-byte"))
+    hideFileP = HideFile
+      <$> argument str (metavar "BUCKET")
+      <*> argument str (metavar "FILENAME")
+
+hashmap :: ReadM (HashMap Text Text)
+hashmap =
+  eitherReader $ replaceLeft msg . \s -> do
+    xs <- Env.splitOn ',' s
+    ys <- traverse (pair <=< traverse Env.str <=< Env.splitOn ':') xs
+    pure (HashMap.fromList ys)
+ where
+  msg = "must be a comma-separated list of colon-separated key-value pairs"
+
+replaceLeft :: b -> Either a x -> Either b x
+replaceLeft b =
+  either (\_ -> Left b) pure
+
+csv :: Env.Reader String a -> ReadM [a]
+csv =
+  ssv ','
+
+ssv :: Char -> Env.Reader String a -> ReadM [a]
+ssv c r =
+  eitherReader (traverse r <=< Env.splitOn c)
+
+pair :: [a] -> Either String (a, a)
+pair = \case
+  [x, y] ->
+    pure (x, y)
+  _ ->
+    Left "must be a pair"
 
 char :: ReadM Char
 char =
@@ -138,10 +193,6 @@ char =
       pure x
     _ ->
       Left "must be a one-character string"
-
-csv :: Env.Reader String a -> ReadM [a]
-csv r =
-  eitherReader (traverse r <=< Env.splitOn ',')
 
 bucketType :: Env.Reader String B2.BucketType
 bucketType = \case
