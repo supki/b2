@@ -11,6 +11,7 @@ import           Data.Conduit (ConduitT, (.|), runConduit)
 import qualified Data.Conduit.Binary as CB
 import           Data.ByteString (ByteString)
 import qualified Data.ByteString.Lazy.Char8 as ByteString.Lazy
+import           Data.Int (Int64)
 import qualified Network.HTTP.Conduit as Http
 import           System.Exit (exitFailure)
 import qualified System.IO as IO
@@ -40,9 +41,10 @@ run Cfg {..} cmd = do
       dieP (B2.update_bucket token bucket type_ info Nothing Nothing revision man)
     DeleteBucket bucket ->
       dieP (B2.delete_bucket token bucket man)
-    UploadFile bucket filename filepath contentType info -> do
+    UploadFile bucket filename path contentType info -> do
       uploadUrl <- dieW (B2.get_upload_url token bucket man)
-      dieP (B2.upload_file uploadUrl filename contentType filepath info man)
+      size <- fileSize path
+      dieP (B2.upload_file uploadUrl filename size (CB.sourceFile path) contentType info man)
     ListFileNames bucket startFileName maxCount prefix delimiter ->
       dieP (B2.list_file_names token bucket startFileName maxCount prefix delimiter man)
     ListFileVersions bucket startFileName startFileId maxCount prefix delimiter -> do
@@ -50,16 +52,16 @@ run Cfg {..} cmd = do
       dieP (B2.list_file_versions token bucket start maxCount prefix delimiter man)
     GetFileInfo file ->
       dieP (B2.get_file_info token file man)
-    DownloadById file filepath firstByte lastByte -> do
-      download (dieW (B2.download_file_by_id token (firstByte, lastByte) file man)) filepath
-    DownloadByName bucket filename filepath firstByte lastByte -> do
-      download (dieW (B2.download_file_by_name token (firstByte, lastByte) bucket filename man)) filepath
+    DownloadById file path firstByte lastByte -> do
+      download (dieW (B2.download_file_by_id token (firstByte, lastByte) file man)) path
+    DownloadByName bucket filename path firstByte lastByte -> do
+      download (dieW (B2.download_file_by_name token (firstByte, lastByte) bucket filename man)) path
     HideFile bucket filename ->
       dieP (B2.hide_file token bucket filename man)
     DeleteFileVersion filename file ->
       dieP (B2.delete_file_version token filename file man)
 
-download :: ResourceT IO (ConduitT () ByteString (ResourceT IO) ())  -> FilePath -> IO ()
+download :: ResourceT IO (ConduitT () ByteString (ResourceT IO) ()) -> FilePath -> IO ()
 download streamBody path =
   runResourceT $ do
     source <- streamBody
@@ -72,6 +74,10 @@ sinkFile = \case
     CB.sinkHandle IO.stdout
   path ->
     CB.sinkFile path
+
+fileSize :: FilePath -> IO Int64
+fileSize path =
+  fmap fromIntegral (IO.withBinaryFile path IO.ReadMode IO.hFileSize)
 
 dieW :: (MonadIO m, Aeson.ToJSON e) => m (Either e a) -> m a
 dieW x = do

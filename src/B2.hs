@@ -4,6 +4,7 @@
 {-# LANGUAGE QuasiQuotes #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE StrictData #-}
+{-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeFamilies #-}
 module B2
   ( module B2.AuthorizationToken
@@ -20,7 +21,7 @@ module B2
 import           Control.Exception (Exception, throwIO)
 import           Control.Monad (join)
 import           Control.Monad.IO.Class (MonadIO(..))
-import           Control.Monad.Trans.Resource (MonadResource)
+import           Control.Monad.Trans.Resource (MonadResource, ResourceT)
 import qualified Crypto.Hash as Hash
 import           Data.Aeson ((.:), (.=))
 import qualified Data.Aeson as Aeson
@@ -30,7 +31,7 @@ import           Data.ByteString (ByteString)
 import qualified Data.ByteString.Lazy as Lazy (ByteString)
 import qualified Data.ByteString.Lazy as ByteString.Lazy
 import qualified Data.CaseInsensitive as CI
-import           Data.Conduit (ConduitT, (.|), runConduit)
+import           Data.Conduit (ConduitT, (.|), await, runConduit, yield)
 import qualified Data.Conduit.List as CL
 import           Data.Int (Int64)
 import           Data.HashMap.Strict (HashMap)
@@ -42,7 +43,6 @@ import           Data.Text (Text)
 import qualified Data.Text.Encoding as Text
 import           Prelude hiding (id)
 import qualified Network.HTTP.Conduit as Http
-import qualified Network.HTTP.Client.Conduit as Http (streamFile)
 import qualified Network.HTTP.Types as Http
 import           Text.Printf (printf)
 
@@ -603,13 +603,14 @@ upload_file
      )
   => env
   -> Text
+  -> Int64
+  -> ConduitT () ByteString (ResourceT IO) ()
   -> Maybe Text
-  -> FilePath
   -> Maybe (HashMap Text Text)
   -> Http.Manager
   -> IO (Either Error File)
-upload_file env name contentType path info man = do
-  req <- uploadRequest env name path contentType info
+upload_file env name size contents contentType info man = do
+  req <- uploadRequest env name size contents contentType info
   res <- Http.httpLbs req man
   parseResponseJson res
 
@@ -665,27 +666,28 @@ uploadRequest
   :: (HasUploadUrl env, HasAuthorizationToken env)
   => env
   -> Text
-  -> FilePath
+  -> Int64
+  -> ConduitT () ByteString (ResourceT IO) ()
   -> Maybe Text
   -> Maybe (HashMap Text Text)
   -> IO Http.Request
-uploadRequest env name path contentType info = do
+uploadRequest env name size contents contentType info = do
   req <- Http.parseRequest (unUploadUrl (getUploadUrl env))
-  requestBody <- Http.streamFile path
   pure req
     { Http.method="POST"
     , Http.requestHeaders=
       ( authorization env
       : ("X-Bz-File-Name", urlEncode (Text.encodeUtf8 name))
       : ("Content-Type", maybe "b2/x-auto" Text.encodeUtf8 contentType)
-      : ("X-Bz-Content-Sha1", "do_not_verify")
+      : ("X-Bz-Content-Sha1", "hex_digits_at_end")
       : map
           (bimap
             (("X-Bz-Info-" <>) . CI.mk . Text.encodeUtf8)
             (urlEncode . Text.encodeUtf8))
           (foldMap HashMap.toList info)
       )
-    , Http.requestBody
+    , Http.requestBody=
+        Http.requestBodySource (size + 40) (contents .| hexDigitsAtEnd)
     }
  where
   urlEncode =
@@ -713,6 +715,20 @@ uploadPartRequest env idx content = do
   text :: Show a => a -> ByteString
   text =
     fromString . show
+
+hexDigitsAtEnd :: Monad m => ConduitT ByteString ByteString m ()
+hexDigitsAtEnd =
+  go (Hash.hashInit @Hash.SHA1)
+ where
+  go ctx = do
+    nextChunk <- await
+    case nextChunk of
+      Nothing ->
+        yield (fromString (show (Hash.hashFinalize ctx)))
+      Just chunk -> do
+        yield chunk
+        let ctx' = Hash.hashUpdate ctx chunk
+        ctx' `seq` go ctx'
 
 downloadByNameRequest
   :: ( HasDownloadUrl env
