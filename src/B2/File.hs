@@ -18,6 +18,7 @@ import           Data.Int (Int64)
 import           Data.HashMap.Strict (HashMap)
 import           Data.String (IsString)
 import           Data.Text (Text)
+import           Text.Printf (PrintfArg)
 
 import           B2.ID (ID)
 
@@ -89,7 +90,7 @@ instance HasFileID File where
   getFileID File {..} = getFileID fileIDs
 
 newtype FileName = FileName { unFileName :: Text }
-    deriving (Show, Eq, IsString, Aeson.FromJSON, Aeson.ToJSON)
+    deriving (Show, Eq, IsString, PrintfArg, Aeson.FromJSON, Aeson.ToJSON)
 
 class HasFileName t where
   getFileName :: t -> FileName

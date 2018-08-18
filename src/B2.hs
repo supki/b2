@@ -253,12 +253,13 @@ download_file_by_id env range fileID man = do
 download_file_by_name
   :: ( HasDownloadUrl env
      , HasAuthorizationToken env
+     , HasFileName fileName
      , MonadResource m
      )
   => env
   -> (Maybe Int64, Maybe Int64)
   -> Text
-  -> Text
+  -> fileName
   -> Http.Manager
   -> m (Either Error (ConduitT () ByteString m ()))
 download_file_by_name env range bucketName fileName man = do
@@ -371,12 +372,13 @@ get_upload_part_url env id man = do
 
 hide_file
   :: ( HasBucketID bucketID
+     , HasFileName fileName
      , HasBaseUrl env
      , HasAuthorizationToken env
      )
   => env
   -> bucketID
-  -> Text
+  -> fileName
   -> Http.Manager
   -> IO (Either Error File)
 hide_file env bucket fileName man = do
@@ -384,7 +386,7 @@ hide_file env bucket fileName man = do
   res <- Http.httpLbs req
     { Http.requestBody=Http.RequestBodyLBS (Aeson.encode [aesonQQ|
         { bucketId: #{getBucketID bucket}
-        , fileName: #{fileName}
+        , fileName: #{getFileName fileName}
         }
       |])
     } man
@@ -715,15 +717,16 @@ uploadPartRequest env idx content = do
 downloadByNameRequest
   :: ( HasDownloadUrl env
      , HasAuthorizationToken env
+     , HasFileName fileName
      , MonadIO m
      )
   => env
   -> (Maybe Int64, Maybe Int64)
   -> Text
-  -> Text
+  -> fileName
   -> m Http.Request
 downloadByNameRequest env range bucket file =
-  downloadRequest env range (printf "/file/%s/%s" bucket file)
+  downloadRequest env range (printf "/file/%s/%s" bucket (getFileName file))
 
 downloadByIDRequest
   :: ( HasFileID fileID

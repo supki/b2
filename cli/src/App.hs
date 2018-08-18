@@ -5,7 +5,7 @@ module App
   ) where
 
 import           Control.Monad.IO.Class (MonadIO(..))
-import           Control.Monad.Trans.Resource (MonadResource, runResourceT)
+import           Control.Monad.Trans.Resource (MonadResource, ResourceT, runResourceT)
 import qualified Data.Aeson as Aeson
 import           Data.Conduit (ConduitT, (.|), runConduit)
 import qualified Data.Conduit.Binary as CB
@@ -51,14 +51,20 @@ run Cfg {..} cmd = do
     GetFileInfo file ->
       dieP (B2.get_file_info token file man)
     DownloadById file filepath firstByte lastByte -> do
-      runResourceT $ do
-        source <- dieW (B2.download_file_by_id token (firstByte, lastByte) file man)
-        runConduit $
-          source .| sinkFile filepath
+      download (dieW (B2.download_file_by_id token (firstByte, lastByte) file man)) filepath
+    DownloadByName bucket filename filepath firstByte lastByte -> do
+      download (dieW (B2.download_file_by_name token (firstByte, lastByte) bucket filename man)) filepath
     HideFile bucket filename ->
       dieP (B2.hide_file token bucket filename man)
     DeleteFileVersion filename file ->
       dieP (B2.delete_file_version token filename file man)
+
+download :: ResourceT IO (ConduitT () ByteString (ResourceT IO) ())  -> FilePath -> IO ()
+download streamBody path =
+  runResourceT $ do
+    source <- streamBody
+    runConduit $
+      source .| sinkFile path
 
 sinkFile :: MonadResource m => FilePath -> ConduitT ByteString o m ()
 sinkFile = \case

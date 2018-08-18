@@ -71,9 +71,15 @@ data Cmd
       FilePath
       (Maybe Int64)
       (Maybe Int64)
+  | DownloadByName
+      Text
+      B2.FileName
+      FilePath
+      (Maybe Int64)
+      (Maybe Int64)
   | HideFile
       (B2.ID B2.Bucket)
-      Text
+      B2.FileName
   | DeleteFileVersion
       B2.FileName
       (B2.ID B2.File)
@@ -102,6 +108,7 @@ get =
         , cmd listFileVersionsP  "list-file-versions"  "List file versions"
         , cmd getFileInfoP       "get-file-info"       "Get file info"
         , cmd downloadByIdP      "download-by-id"      "Download a file by ID"
+        , cmd downloadByNameP    "download-by-name"    "Download a file by name"
         , cmd hideFileP          "hide-file"           "Hide a file"
         , cmd deleteFileVersionP "delete-file-version" "Delete a file version"
         ])
@@ -162,6 +169,12 @@ get =
       <$> argument str (metavar "FILE")
     downloadByIdP = DownloadById
       <$> argument str (metavar "FILE")
+      <*> argument str (metavar "FILEPATH")
+      <*> optional (option auto (long "first-byte"))
+      <*> optional (option auto (long "last-byte"))
+    downloadByNameP = DownloadByName
+      <$> argument str (metavar "BUCKETNAME")
+      <*> argument str (metavar "FILENAME")
       <*> argument str (metavar "FILEPATH")
       <*> optional (option auto (long "first-byte"))
       <*> optional (option auto (long "last-byte"))
