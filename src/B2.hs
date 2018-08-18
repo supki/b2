@@ -40,6 +40,7 @@ import           Data.Text (Text)
 import qualified Data.Text.Encoding as Text
 import           Prelude hiding (id)
 import qualified Network.HTTP.Conduit as Http
+import qualified Network.HTTP.Client.Conduit as Http (streamFile)
 import qualified Network.HTTP.Types as Http
 import           Text.Printf (printf)
 
@@ -599,12 +600,12 @@ b2_upload_file
   => env
   -> Text
   -> Maybe Text
-  -> Lazy.ByteString
+  -> FilePath
   -> [(Http.HeaderName, Text)]
   -> Http.Manager
   -> IO (Either Error File)
-b2_upload_file env name contentType content info man = do
-  req <- uploadRequest env name content contentType info
+b2_upload_file env name contentType path info man = do
+  req <- uploadRequest env name path contentType info
   res <- Http.httpLbs req man
   parseResponseJson res
 
@@ -660,12 +661,13 @@ uploadRequest
   :: (HasUploadUrl env, HasAuthorizationToken env)
   => env
   -> Text
-  -> Lazy.ByteString
+  -> FilePath
   -> Maybe Text
   -> [(Http.HeaderName, Text)]
   -> IO Http.Request
-uploadRequest env name content contentType info = do
+uploadRequest env name path contentType info = do
   req <- Http.parseRequest (unUploadUrl (getUploadUrl env))
+  requestBody <- Http.streamFile path
   pure req
     { Http.method="POST"
     , Http.requestHeaders=
@@ -675,7 +677,7 @@ uploadRequest env name content contentType info = do
       : ("X-Bz-Content-Sha1", "do_not_verify")
       : map (bimap ("X-Bz-Info-" <>) (urlEncode . Text.encodeUtf8)) info
       )
-    , Http.requestBody=Http.RequestBodyLBS content
+    , Http.requestBody
     }
  where
   urlEncode =

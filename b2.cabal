@@ -2,7 +2,7 @@
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 52c266274b7e5de7f6c036a02d1ab87db18c191627dc1a42d598fe0845d978a5
+-- hash: 920692b10fddcdee45c15184091c8f71aab2af363a521bb991ea2490525eebb1
 
 name:           b2
 version:        1.0.0
@@ -12,6 +12,7 @@ category:       Web
 maintainer:     matvey.aksenov@gmail.com
 copyright:      Matvey Aksenov 2018
 license:        BSD2
+license-file:   LICENSE
 build-type:     Simple
 cabal-version:  >= 1.10
 

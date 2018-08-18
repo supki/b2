@@ -10,7 +10,6 @@ import qualified Data.Aeson as Aeson
 import           Data.Conduit (ConduitT, (.|), runConduit)
 import qualified Data.Conduit.Binary as CB
 import           Data.ByteString (ByteString)
-import qualified Data.ByteString.Lazy as Lazy (ByteString)
 import qualified Data.ByteString.Lazy.Char8 as ByteString.Lazy
 import qualified Network.HTTP.Conduit as Http
 import           System.Exit (exitFailure)
@@ -41,8 +40,7 @@ run Cfg {..} cmd = do
       dieP (B2.b2_delete_bucket token id_ man)
     UploadFile bucket filename filepath contentType -> do
       uploadUrl <- dieW (B2.b2_get_upload_url token bucket man)
-      contents <- fileContents filepath
-      dieP (B2.b2_upload_file uploadUrl filename contentType contents [] man)
+      dieP (B2.b2_upload_file uploadUrl filename contentType filepath [] man)
     ListFileNames bucket startFileName maxCount prefix delimiter ->
       dieP (B2.b2_list_file_names token bucket startFileName maxCount prefix delimiter man)
     ListFileVersions bucket startFileName startFileId maxCount prefix delimiter -> do
@@ -53,13 +51,6 @@ run Cfg {..} cmd = do
         source <- dieW (B2.b2_download_file_by_id token (firstByte, lastByte) file man)
         runConduit $
           source .| sinkFile filepath
-
-fileContents :: FilePath -> IO Lazy.ByteString
-fileContents = \case
-  "-" ->
-    ByteString.Lazy.hGetContents IO.stdin
-  path ->
-    ByteString.Lazy.readFile path
 
 sinkFile :: MonadResource m => FilePath -> ConduitT ByteString o m ()
 sinkFile = \case

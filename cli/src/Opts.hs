@@ -114,14 +114,14 @@ get =
       <*> optional (option str (long "content-type" <> metavar "CONTENT-TYPE"))
     listFileNamesP = ListFileNames
       <$> argument str (metavar "BUCKET")
-      <*> optional (option str (long "start-file-name" <> metavar "FILENAME"))
+      <*> optional (option str (long "start-name" <> metavar "FILENAME"))
       <*> optional (option auto (long "max-count"))
       <*> optional (option str (long "prefix" <> metavar "FILENAME"))
       <*> optional (option char (long "delimiter" <> metavar "CHARACTER"))
     listFileVersionsP = ListFileVersions
       <$> argument str (metavar "BUCKET")
-      <*> optional (option str (long "start-file-name" <> metavar "FILENAME"))
-      <*> optional (option str (long "start-file-id" <> metavar "FILE"))
+      <*> optional (option str (long "start-name" <> metavar "FILENAME"))
+      <*> optional (option str (long "start-id" <> metavar "FILE"))
       <*> optional (option auto (long "max-count"))
       <*> optional (option str (long "prefix" <> metavar "FILENAME"))
       <*> optional (option char (long "delimiter" <> metavar "CHARACTER"))
