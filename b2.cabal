@@ -2,7 +2,7 @@
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 920692b10fddcdee45c15184091c8f71aab2af363a521bb991ea2490525eebb1
+-- hash: 84b756389eb811ccf50dc7517e8413f5f836bf6077b6fbc9c622cf7c85581999
 
 name:           b2
 version:        1.0.0
@@ -29,6 +29,7 @@ library
     , aeson-qq
     , base >=4.7 && <5
     , bytestring
+    , case-insensitive
     , conduit
     , cryptonite
     , http-conduit

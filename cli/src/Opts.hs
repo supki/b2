@@ -50,6 +50,7 @@ data Cmd
       Text
       FilePath
       (Maybe Text)
+      (Maybe (HashMap Text Text))
   | ListFileNames
       (B2.ID B2.Bucket)
       (Maybe Text)
@@ -63,6 +64,8 @@ data Cmd
       (Maybe Int64)
       (Maybe Text)
       (Maybe Char)
+  | GetFileInfo
+      (B2.ID B2.File)
   | DownloadById
       (B2.ID B2.File)
       FilePath
@@ -94,6 +97,7 @@ get =
         , cmd uploadFileP       "upload-file"        "Upload file"
         , cmd listFileNamesP    "list-file-names"    "List file names"
         , cmd listFileVersionsP "list-file-versions" "List file versions"
+        , cmd getFileInfoP      "get-file-info"      "Get file info"
         , cmd downloadByIdP     "download-by-id"     "Download a file by ID"
         , cmd hideFileP         "hide-file"          "Hide a file"
         ])
@@ -136,6 +140,7 @@ get =
       <*> argument str (metavar "FILENAME")
       <*> argument str (metavar "FILEPATH")
       <*> optional (option str (long "content-type" <> metavar "CONTENT-TYPE"))
+      <*> optional (option hashmap (long "info"))
     listFileNamesP = ListFileNames
       <$> argument str (metavar "BUCKET")
       <*> optional (option str (long "start-name" <> metavar "FILENAME"))
@@ -149,6 +154,8 @@ get =
       <*> optional (option auto (long "max-count"))
       <*> optional (option str (long "prefix" <> metavar "FILENAME"))
       <*> optional (option char (long "delimiter" <> metavar "CHARACTER"))
+    getFileInfoP = GetFileInfo
+      <$> argument str (metavar "FILE")
     downloadByIdP = DownloadById
       <$> argument str (metavar "FILE")
       <*> argument str (metavar "FILEPATH")
