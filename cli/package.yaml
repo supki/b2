@@ -26,6 +26,7 @@ default-extensions:
 library:
   dependencies:
     - aeson
+    - async
     - b2
     - bytestring
     - conduit

@@ -26,8 +26,8 @@ import           B2.ID (ID)
 data File = File
   { fileIDs         :: FileIDs
   , contentLength   :: Int64
-  , contentSha1     :: Text
-  , contentType     :: Text
+  , contentSha1     :: Maybe Text
+  , contentType     :: Maybe Text
   , fileInfo        :: HashMap Text Text
   , action          :: Text
   , uploadTimestamp :: Int64

@@ -2,7 +2,7 @@
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 21f6b24a0a23b16dada30737177c90c5e6493a98abadf1c560e5d85ca54d1b0a
+-- hash: 5c63a53a14069b945e57a002c0a581fe36f0b002a868e6ee8d8e1cb1825961f8
 
 name:           b2-cli
 version:        1.0.0
@@ -30,6 +30,7 @@ library
   ghc-options: -funbox-strict-fields -Wall -Werror
   build-depends:
       aeson
+    , async
     , b2
     , base >=4.7 && <5
     , bytestring

@@ -4,6 +4,7 @@ module B2.LargeFile
   ( LargeFile(..)
   , LargeFiles(..)
   , LargeFilePart(..)
+  , HasPartSha1(..)
   , LargeFileParts(..)
   ) where
 
@@ -66,6 +67,12 @@ instance Aeson.FromJSON LargeFilePart where
 
 instance HasFileID LargeFilePart where
   getFileID LargeFilePart {..} = getFileID fileID
+
+class HasPartSha1 x where
+  getPartSha1 :: x -> Text
+
+instance HasPartSha1 LargeFilePart where
+  getPartSha1 = contentSha1
 
 data LargeFileParts = LargeFileParts
   { nextPartNumber :: Maybe Int64

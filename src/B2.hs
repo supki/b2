@@ -271,10 +271,11 @@ finish_large_file
   :: ( HasFileID fileID
      , HasBaseUrl env
      , HasAuthorizationToken env
+     , HasPartSha1 part
      )
   => env
   -> fileID
-  -> [Text]
+  -> [part]
   -> Http.Manager
   -> IO (Either Error File)
 finish_large_file env file partSha1Array man = do
@@ -282,7 +283,7 @@ finish_large_file env file partSha1Array man = do
   res <- Http.httpLbs req
     { Http.requestBody=Http.RequestBodyLBS (Aeson.encode [aesonQQ|
         { fileId: #{getFileID file}
-        , partSha1Array: #{partSha1Array}
+        , partSha1Array: #{map getPartSha1 partSha1Array}
         }
       |])
     } man
@@ -620,11 +621,12 @@ upload_part
      )
   => env
   -> Int64
-  -> ByteString
+  -> Int64
+  -> ConduitT () ByteString (ResourceT IO) ()
   -> Http.Manager
   -> IO (Either Error LargeFilePart)
-upload_part env idx part man = do
-  req <- uploadPartRequest env idx part
+upload_part env idx size contents man = do
+  req <- uploadPartRequest env idx size contents
   res <- Http.httpLbs req man
   parseResponseJson res
 
@@ -697,19 +699,21 @@ uploadPartRequest
   :: (HasUploadPartUrl env, HasAuthorizationToken env)
   => env
   -> Int64
-  -> ByteString
+  -> Int64
+  -> ConduitT () ByteString (ResourceT IO) ()
   -> IO Http.Request
-uploadPartRequest env idx content = do
+uploadPartRequest env idx size contents = do
   req <- Http.parseRequest (unUploadPartUrl (getUploadPartUrl env))
   pure req
     { Http.method="POST"
     , Http.requestHeaders=
       ( authorization env
       : ("X-Bz-Part-Number", text idx)
-      : ("X-Bz-Content-Sha1", text (Hash.hashWith Hash.SHA1 content))
+      : ("X-Bz-Content-Sha1", "hex_digits_at_end")
       : []
       )
-    , Http.requestBody=Http.RequestBodyBS content
+    , Http.requestBody=
+        Http.requestBodySource (size + 40) (contents .| hexDigitsAtEnd)
     }
  where
   text :: Show a => a -> ByteString

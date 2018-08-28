@@ -4,14 +4,19 @@ module App
   ( run
   ) where
 
+import           Control.Exception (bracket_)
+import           Control.Concurrent.Async (async, wait)
+import qualified Control.Concurrent.QSem as QSem
 import           Control.Monad.IO.Class (MonadIO(..))
 import           Control.Monad.Trans.Resource (MonadResource, ResourceT, runResourceT)
 import qualified Data.Aeson as Aeson
+import           Data.Bool (bool)
 import           Data.Conduit (ConduitT, (.|), runConduit)
 import qualified Data.Conduit.Binary as CB
 import           Data.ByteString (ByteString)
 import qualified Data.ByteString.Lazy.Char8 as ByteString.Lazy
 import           Data.Int (Int64)
+import           Data.Traversable (for, traverse)
 import qualified Network.HTTP.Conduit as Http
 import           System.Exit (exitFailure)
 import qualified System.IO as IO
@@ -45,9 +50,24 @@ run Cfg {..} cmd = do
       uploadUrl <- dieW (B2.get_upload_url token bucket man)
       size <- fileSize path
       dieP (B2.upload_file uploadUrl filename size (CB.sourceFile path) contentType info man)
-    UploadLargeFile bucket filename _path contentType info -> do
+    UploadLargeFile bucket filename path contentType info -> do
       largeFile <- dieW (B2.start_large_file token bucket filename contentType info man)
-      dieP (B2.finish_large_file token largeFile [] man)
+      size <- fileSize path
+      let partSize = B2.recommendedPartSize token
+          partsCount = size `div` partSize + bool 0 1 (size `mod` partSize > 0)
+          threads = 3
+      sem <- QSem.newQSem threads
+      asyncs <- for [1 .. partsCount] $ \partNumber -> do
+        bracket_ (QSem.waitQSem sem) (QSem.signalQSem sem) $
+          async $ do
+            url <- dieW (B2.get_upload_part_url token largeFile man)
+            let offset = fromIntegral ((partNumber - 1) * partSize)
+                maxCount = fromIntegral partSize
+                src = CB.sourceFileRange path (pure offset) (pure maxCount)
+                partActualSIze = bool partSize (size `mod` partSize) (partNumber == partsCount)
+            dieW (B2.upload_part url partNumber partActualSIze src man)
+      parts <- traverse wait asyncs
+      dieP (B2.finish_large_file token largeFile parts man)
     ListFileNames bucket startFileName maxCount prefix delimiter ->
       dieP (B2.list_file_names token bucket startFileName maxCount prefix delimiter man)
     ListFileVersions bucket startFileName startFileId maxCount prefix delimiter -> do
