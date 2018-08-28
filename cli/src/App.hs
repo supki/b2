@@ -45,6 +45,9 @@ run Cfg {..} cmd = do
       uploadUrl <- dieW (B2.get_upload_url token bucket man)
       size <- fileSize path
       dieP (B2.upload_file uploadUrl filename size (CB.sourceFile path) contentType info man)
+    UploadLargeFile bucket filename _path contentType info -> do
+      largeFile <- dieW (B2.start_large_file token bucket filename contentType info man)
+      dieP (B2.finish_large_file token largeFile [] man)
     ListFileNames bucket startFileName maxCount prefix delimiter ->
       dieP (B2.list_file_names token bucket startFileName maxCount prefix delimiter man)
     ListFileVersions bucket startFileName startFileId maxCount prefix delimiter -> do
@@ -54,9 +57,9 @@ run Cfg {..} cmd = do
       dieP (B2.get_file_info token file man)
     GetDownloadAuth bucket prefix durationS ->
       dieP (B2.get_download_authorization token bucket prefix durationS Nothing man)
-    DownloadById file path firstByte lastByte -> do
+    DownloadById file path firstByte lastByte ->
       download (dieW (B2.download_file_by_id token (firstByte, lastByte) file man)) path
-    DownloadByName bucket filename path firstByte lastByte -> do
+    DownloadByName bucket filename path firstByte lastByte ->
       download (dieW (B2.download_file_by_name token (firstByte, lastByte) bucket filename man)) path
     HideFile bucket filename ->
       dieP (B2.hide_file token bucket filename man)

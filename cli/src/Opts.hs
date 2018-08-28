@@ -51,6 +51,12 @@ data Cmd
       FilePath
       (Maybe Text)
       (Maybe (HashMap Text Text))
+  | UploadLargeFile
+      (B2.ID B2.Bucket)
+      Text
+      FilePath
+      (Maybe Text)
+      (Maybe (HashMap Text Text))
   | ListFileNames
       (B2.ID B2.Bucket)
       (Maybe Text)
@@ -108,6 +114,7 @@ get =
         , cmd deleteBucketP      "delete-bucket"       "Delete a bucket"
 
         , cmd uploadFileP        "upload-file"         "Upload file"
+        , cmd uploadLargeFileP   "upload-large-file"   "Upload large file"
         , cmd listFileNamesP     "list-file-names"     "List file names"
         , cmd listFileVersionsP  "list-file-versions"  "List file versions"
         , cmd getFileInfoP       "get-file-info"       "Get file info"
@@ -152,6 +159,12 @@ get =
     deleteBucketP = DeleteBucket
       <$> argument str (metavar "ID")
     uploadFileP = UploadFile
+      <$> argument str (metavar "BUCKET")
+      <*> argument str (metavar "FILENAME")
+      <*> argument str (metavar "FILEPATH")
+      <*> optional (option str (long "content-type" <> metavar "CONTENT-TYPE"))
+      <*> optional (option hashmap (long "info"))
+    uploadLargeFileP = UploadLargeFile
       <$> argument str (metavar "BUCKET")
       <*> argument str (metavar "FILENAME")
       <*> argument str (metavar "FILEPATH")

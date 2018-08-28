@@ -38,7 +38,7 @@ import           Data.HashMap.Strict (HashMap)
 import qualified Data.HashMap.Strict as HashMap
 import           Data.Maybe (fromMaybe)
 import           Data.Monoid ((<>))
-import           Data.String (fromString)
+import           Data.String (IsString(fromString))
 import           Data.Text (Text)
 import qualified Data.Text.Encoding as Text
 import           Prelude hiding (id)
@@ -549,7 +549,7 @@ start_large_file
   => env
   -> bucketID
   -> Text
-  -> Text
+  -> Maybe Text
   -> Maybe (HashMap Text Text)
   -> Http.Manager
   -> IO (Either Error LargeFile)
@@ -559,7 +559,7 @@ start_large_file env bucket fileName contentType info man = do
     { Http.requestBody=Http.RequestBodyLBS (Aeson.encode [aesonQQ|
         { bucketId: #{getBucketID bucket}
         , fileName: #{fileName}
-        , contentType: #{contentType}
+        , contentType: #{fromMaybe autoContentType contentType}
         , fileInfo: #{info}
         }
       |])
@@ -678,7 +678,7 @@ uploadRequest env name size contents contentType info = do
     , Http.requestHeaders=
       ( authorization env
       : ("X-Bz-File-Name", urlEncode (Text.encodeUtf8 name))
-      : ("Content-Type", maybe "b2/x-auto" Text.encodeUtf8 contentType)
+      : ("Content-Type", maybe autoContentType Text.encodeUtf8 contentType)
       : ("X-Bz-Content-Sha1", "hex_digits_at_end")
       : map
           (bimap
@@ -814,3 +814,7 @@ parseJsonEx bytes =
 authorization :: HasAuthorizationToken env => env -> Http.Header
 authorization env =
   ("Authorization", Text.encodeUtf8 (unAuthorizationToken (getAuthorizationToken env)))
+
+autoContentType :: IsString str => str
+autoContentType =
+  "b2/x-auto"
