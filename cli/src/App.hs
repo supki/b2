@@ -16,6 +16,7 @@ import qualified Data.Conduit.Binary as CB
 import           Data.ByteString (ByteString)
 import qualified Data.ByteString.Lazy.Char8 as ByteString.Lazy
 import           Data.Int (Int64)
+import           Data.Maybe (fromMaybe)
 import           Data.Traversable (for, traverse)
 import qualified Network.HTTP.Conduit as Http
 import           System.Exit (exitFailure)
@@ -46,28 +47,27 @@ run Cfg {..} cmd = do
       dieP (B2.update_bucket token bucket type_ info Nothing Nothing revision man)
     DeleteBucket bucket ->
       dieP (B2.delete_bucket token bucket man)
-    UploadFile bucket filename path contentType info -> do
-      uploadUrl <- dieW (B2.get_upload_url token bucket man)
+    UploadFile bucket filename path contentType info partSizeQ threads -> do
       size <- fileSize path
-      dieP (B2.upload_file uploadUrl filename size (CB.sourceFile path) contentType info man)
-    UploadLargeFile bucket filename path contentType info -> do
-      largeFile <- dieW (B2.start_large_file token bucket filename contentType info man)
-      size <- fileSize path
-      let partSize = B2.recommendedPartSize token
+      let partSize = fromMaybe (B2.recommendedPartSize token) partSizeQ
           partsCount = size `div` partSize + bool 0 1 (size `mod` partSize > 0)
-          threads = 3
-      sem <- QSem.newQSem threads
-      asyncs <- for [1 .. partsCount] $ \partNumber ->
-        bracket_ (QSem.waitQSem sem) (QSem.signalQSem sem) $
-          async $ do
-            url <- dieW (B2.get_upload_part_url token largeFile man)
-            let offset = fromIntegral ((partNumber - 1) * partSize)
-                maxCount = fromIntegral partSize
-                src = CB.sourceFileRange path (pure offset) (pure maxCount)
-                partActualSize = bool partSize (size `mod` partSize) (partNumber == partsCount)
-            dieW (B2.upload_part url partNumber partActualSize src man)
-      parts <- traverse wait asyncs
-      dieP (B2.finish_large_file token largeFile parts man)
+      if partsCount > 1 then do
+        largeFile <- dieW (B2.start_large_file token bucket filename contentType info man)
+        sem <- QSem.newQSem threads
+        asyncs <- for [1 .. partsCount] $ \partNumber ->
+          bracket_ (QSem.waitQSem sem) (QSem.signalQSem sem) $
+            async $ do
+              url <- dieW (B2.get_upload_part_url token largeFile man)
+              let offset = fromIntegral ((partNumber - 1) * partSize)
+                  maxCount = fromIntegral partSize
+                  src = CB.sourceFileRange path (pure offset) (pure maxCount)
+                  partActualSize = bool partSize (size `mod` partSize) (partNumber == partsCount)
+              dieW (B2.upload_part url partNumber partActualSize src man)
+        parts <- traverse wait asyncs
+        dieP (B2.finish_large_file token largeFile parts man)
+      else do
+        uploadUrl <- dieW (B2.get_upload_url token bucket man)
+        dieP (B2.upload_file uploadUrl filename size (CB.sourceFile path) contentType info man)
     ListFileNames bucket startFileName maxCount prefix delimiter ->
       dieP (B2.list_file_names token bucket startFileName maxCount prefix delimiter man)
     ListFileVersions bucket startFileName startFileId maxCount prefix delimiter -> do

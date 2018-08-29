@@ -51,12 +51,8 @@ data Cmd
       FilePath
       (Maybe Text)
       (Maybe (HashMap Text Text))
-  | UploadLargeFile
-      (B2.ID B2.Bucket)
-      Text
-      FilePath
-      (Maybe Text)
-      (Maybe (HashMap Text Text))
+      (Maybe Int64)
+      Int
   | ListFileNames
       (B2.ID B2.Bucket)
       (Maybe Text)
@@ -121,7 +117,6 @@ get =
         , cmd deleteBucketP             "delete-bucket"       "Delete a bucket"
 
         , cmd uploadFileP               "upload-file"         "Upload file"
-        , cmd uploadLargeFileP          "upload-large-file"   "Upload large file"
         , cmd listFileNamesP            "list-file-names"     "List file names"
         , cmd listFileVersionsP         "list-file-versions"  "List file versions"
         , cmd listUnfinishedLargeFilesP "list-unfinished-large-files"
@@ -175,12 +170,13 @@ get =
       <*> argument str (metavar "FILEPATH")
       <*> optional (option str (long "content-type" <> metavar "CONTENT-TYPE"))
       <*> optional (option hashmap (long "info"))
-    uploadLargeFileP = UploadLargeFile
-      <$> argument str (metavar "BUCKET")
-      <*> argument str (metavar "FILENAME")
-      <*> argument str (metavar "FILEPATH")
-      <*> optional (option str (long "content-type" <> metavar "CONTENT-TYPE"))
-      <*> optional (option hashmap (long "info"))
+      <*> optional (option auto (long "part-size" <> metavar "BYTES"))
+      <*> option
+            auto
+            (long "threads" <>
+             help "Number of concurrent threads uploading file parts" <>
+             value defaultThreadsCount <>
+             showDefault)
     listFileNamesP = ListFileNames
       <$> argument str (metavar "BUCKET")
       <*> optional (option str (long "start-name" <> metavar "FILENAME"))
@@ -271,3 +267,6 @@ bucketType = \case
     pure B2.Snapshot
   _ ->
     Left "Unknown bucket type"
+
+defaultThreadsCount :: Int
+defaultThreadsCount = 4
