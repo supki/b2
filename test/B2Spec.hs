@@ -212,8 +212,8 @@ spec = parallel $ do
         }
       |])) `shouldBe` pure File
         { contentLength=13293
-        , contentSha1="unverified:5b13b936d24e0ea47940e84d3021866a05887688"
-        , contentType="text/plain"
+        , contentSha1=pure "unverified:5b13b936d24e0ea47940e84d3021866a05887688"
+        , contentType=pure "text/plain"
         , fileIDs=FileIDs
           { fileID="..."
           , fileName=".vimrc"
@@ -257,8 +257,8 @@ spec = parallel $ do
         { files=
           [ File
             { contentLength=13293
-            , contentSha1="unverified:5b13b936d24e0ea47940e84d3021866a05887688"
-            , contentType="text/plain"
+            , contentSha1=pure "unverified:5b13b936d24e0ea47940e84d3021866a05887688"
+            , contentType=pure "text/plain"
             , fileIDs=FileIDs
               { fileID="..."
               , fileName=".vimrc"
@@ -300,8 +300,8 @@ spec = parallel $ do
         }
       |])) `shouldBe` pure File
         { contentLength=0
-        , contentSha1="da39a3ee5e6b4b0d3255bfef95601890afd80709"
-        , contentType="application/x-bz-hide-marker"
+        , contentSha1=pure "da39a3ee5e6b4b0d3255bfef95601890afd80709"
+        , contentType=pure "application/x-bz-hide-marker"
         , fileIDs=FileIDs
           { fileID="..."
           , fileName=".vimrc"

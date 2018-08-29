@@ -48,7 +48,7 @@ instance Aeson.FromJSON File where
 instance Aeson.ToJSON File where
   toJSON File {fileIDs=FileIDs {..}, ..}=
     Aeson.object
-      [ "fileID" .= fileID
+      [ "fileId" .= fileID
       , "fileName" .= fileName
       , "contentLength" .= contentLength
       , "contentSha1" .= contentSha1

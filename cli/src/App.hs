@@ -57,15 +57,15 @@ run Cfg {..} cmd = do
           partsCount = size `div` partSize + bool 0 1 (size `mod` partSize > 0)
           threads = 3
       sem <- QSem.newQSem threads
-      asyncs <- for [1 .. partsCount] $ \partNumber -> do
+      asyncs <- for [1 .. partsCount] $ \partNumber ->
         bracket_ (QSem.waitQSem sem) (QSem.signalQSem sem) $
           async $ do
             url <- dieW (B2.get_upload_part_url token largeFile man)
             let offset = fromIntegral ((partNumber - 1) * partSize)
                 maxCount = fromIntegral partSize
                 src = CB.sourceFileRange path (pure offset) (pure maxCount)
-                partActualSIze = bool partSize (size `mod` partSize) (partNumber == partsCount)
-            dieW (B2.upload_part url partNumber partActualSIze src man)
+                partActualSize = bool partSize (size `mod` partSize) (partNumber == partsCount)
+            dieW (B2.upload_part url partNumber partActualSize src man)
       parts <- traverse wait asyncs
       dieP (B2.finish_large_file token largeFile parts man)
     ListFileNames bucket startFileName maxCount prefix delimiter ->
@@ -73,6 +73,8 @@ run Cfg {..} cmd = do
     ListFileVersions bucket startFileName startFileId maxCount prefix delimiter -> do
       let start = fmap (\n -> (n, startFileId)) startFileName
       dieP (B2.list_file_versions token bucket start maxCount prefix delimiter man)
+    ListUnfinishedLargeFiles bucket prefix startFileId maxCount -> do
+      dieP (B2.list_unfinished_large_files token bucket prefix startFileId maxCount man)
     GetFileInfo file ->
       dieP (B2.get_file_info token file man)
     GetDownloadAuth bucket prefix durationS ->

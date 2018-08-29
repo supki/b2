@@ -8,13 +8,13 @@ module B2.LargeFile
   , LargeFileParts(..)
   ) where
 
-import           Data.Aeson ((.:))
+import           Data.Aeson ((.:), (.=))
 import qualified Data.Aeson as Aeson
 import           Data.HashMap.Strict (HashMap)
 import           Data.Int (Int64)
 import           Data.Text (Text)
 
-import           B2.File (File, FileIDs, HasFileID(..))
+import           B2.File (File, FileIDs(..), HasFileID(..))
 import           B2.ID (ID)
 
 
@@ -34,6 +34,16 @@ instance Aeson.FromJSON LargeFile where
       uploadTimestamp <- o .: "uploadTimestamp"
       pure LargeFile {..}
 
+instance Aeson.ToJSON LargeFile where
+  toJSON LargeFile {fileIDs=FileIDs {..}, ..} =
+    Aeson.object
+      [ "fileId" .= fileID
+      , "fileName" .= fileName
+      , "contentType" .= contentType
+      , "fileInfo" .= fileInfo
+      , "uploadTimestamp" .= uploadTimestamp
+      ]
+
 instance HasFileID LargeFile where
   getFileID LargeFile {..} = getFileID fileIDs
 
@@ -48,6 +58,13 @@ instance Aeson.FromJSON LargeFiles where
       files <- o .: "files"
       nextFileID <- o .: "nextFileId"
       pure LargeFiles {..}
+
+instance Aeson.ToJSON LargeFiles where
+  toJSON LargeFiles {..} =
+    Aeson.object
+      [ "files" .= files
+      , "nextFileId" .= nextFileID
+      ]
 
 data LargeFilePart = LargeFilePart
   { fileID        :: ID File

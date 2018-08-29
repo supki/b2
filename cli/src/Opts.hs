@@ -70,6 +70,11 @@ data Cmd
       (Maybe Int64)
       (Maybe Text)
       (Maybe Char)
+  | ListUnfinishedLargeFiles
+      (B2.ID B2.Bucket)
+      (Maybe Text)
+      (Maybe (B2.ID B2.File))
+      (Maybe Int64)
   | GetFileInfo
       (B2.ID B2.File)
   | GetDownloadAuth
@@ -104,25 +109,28 @@ get =
   parser =
     subparser
       (mconcat
-        [ cmd createKeyP         "create-key"          "Create a key"
-        , cmd listKeysP          "list-keys"           "List keys"
-        , cmd deleteKeyP         "delete-key"          "Delete a key"
+        [ cmd createKeyP                "create-key"          "Create a key"
+        , cmd listKeysP                 "list-keys"           "List keys"
+        , cmd deleteKeyP                "delete-key"          "Delete a key"
 
-        , cmd createBucketP      "create-bucket"       "Create a bucket"
-        , cmd listBucketsP       "list-buckets"        "List buckets"
-        , cmd updateBucketP      "update-bucket"       "Update a bucket"
-        , cmd deleteBucketP      "delete-bucket"       "Delete a bucket"
+        , cmd createBucketP             "create-bucket"       "Create a bucket"
+        , cmd listBucketsP              "list-buckets"        "List buckets"
+        , cmd updateBucketP             "update-bucket"       "Update a bucket"
+        , cmd deleteBucketP             "delete-bucket"       "Delete a bucket"
 
-        , cmd uploadFileP        "upload-file"         "Upload file"
-        , cmd uploadLargeFileP   "upload-large-file"   "Upload large file"
-        , cmd listFileNamesP     "list-file-names"     "List file names"
-        , cmd listFileVersionsP  "list-file-versions"  "List file versions"
-        , cmd getFileInfoP       "get-file-info"       "Get file info"
-        , cmd getDownloadAuthP   "get-download-auth"   "Get a temporary download authorization"
-        , cmd downloadByIdP      "download-by-id"      "Download a file by ID"
-        , cmd downloadByNameP    "download-by-name"    "Download a file by name"
-        , cmd hideFileP          "hide-file"           "Hide a file"
-        , cmd deleteFileVersionP "delete-file-version" "Delete a file version"
+        , cmd uploadFileP               "upload-file"         "Upload file"
+        , cmd uploadLargeFileP          "upload-large-file"   "Upload large file"
+        , cmd listFileNamesP            "list-file-names"     "List file names"
+        , cmd listFileVersionsP         "list-file-versions"  "List file versions"
+        , cmd listUnfinishedLargeFilesP "list-unfinished-large-files"
+                                                              "List unfinished large files"
+        , cmd getFileInfoP              "get-file-info"       "Get file info"
+        , cmd getDownloadAuthorizationP "get-download-authorization"
+                                                              "Get a temporary download authorization"
+        , cmd downloadByIdP             "download-by-id"      "Download a file by ID"
+        , cmd downloadByNameP           "download-by-name"    "Download a file by name"
+        , cmd hideFileP                 "hide-file"           "Hide a file"
+        , cmd deleteFileVersionP        "delete-file-version" "Delete a file version"
         ])
    where
     cmd p name desc =
@@ -183,9 +191,14 @@ get =
       <*> optional (option auto (long "max-count"))
       <*> optional (option str (long "prefix" <> metavar "FILENAME"))
       <*> optional (option char (long "delimiter" <> metavar "CHARACTER"))
+    listUnfinishedLargeFilesP = ListUnfinishedLargeFiles
+      <$> argument str (metavar "BUCKET")
+      <*> optional (option str (long "prefix" <> metavar "FILENAME"))
+      <*> optional (option str (long "start-id" <> metavar "FILE"))
+      <*> optional (option auto (long "max-count"))
     getFileInfoP = GetFileInfo
       <$> argument str (metavar "FILE")
-    getDownloadAuthP = GetDownloadAuth
+    getDownloadAuthorizationP = GetDownloadAuth
       <$> argument str (metavar "BUCKET")
       <*> argument str (metavar "FILENAME")
       <*> argument auto (metavar "DURATION_S")
