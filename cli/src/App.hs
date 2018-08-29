@@ -87,6 +87,8 @@ run Cfg {..} cmd = do
       dieP (B2.hide_file token bucket filename man)
     DeleteFileVersion filename file ->
       dieP (B2.delete_file_version token filename file man)
+    CancelLargeFile file ->
+      dieP (B2.cancel_large_file token file man)
 
 download :: ResourceT IO (ConduitT () ByteString (ResourceT IO) ()) -> FilePath -> IO ()
 download streamBody path =

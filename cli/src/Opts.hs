@@ -98,6 +98,8 @@ data Cmd
   | DeleteFileVersion
       B2.FileName
       (B2.ID B2.File)
+  | CancelLargeFile
+      (B2.ID B2.File)
     deriving (Show, Eq)
 
 get :: IO Cmd
@@ -131,6 +133,7 @@ get =
         , cmd downloadByNameP           "download-by-name"    "Download a file by name"
         , cmd hideFileP                 "hide-file"           "Hide a file"
         , cmd deleteFileVersionP        "delete-file-version" "Delete a file version"
+        , cmd cancelLargeFileP          "cancel-large-file"   "Cancel large file"
         ])
    where
     cmd p name desc =
@@ -219,6 +222,8 @@ get =
     deleteFileVersionP = DeleteFileVersion
       <$> argument str (metavar "FILENAME")
       <*> argument str (metavar "FILE")
+    cancelLargeFileP = CancelLargeFile
+      <$> argument str (metavar "FILE")
 
 hashmap :: ReadM (HashMap Text Text)
 hashmap =
