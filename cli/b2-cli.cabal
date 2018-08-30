@@ -1,8 +1,8 @@
--- This file has been generated from package.yaml by hpack version 0.20.0.
+-- This file has been generated from package.yaml by hpack version 0.28.2.
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 5c63a53a14069b945e57a002c0a581fe36f0b002a868e6ee8d8e1cb1825961f8
+-- hash: 67fade2d76fe334520a30779e852b050c84e3bd3d96b76d147cf5d055aa26252
 
 name:           b2-cli
 version:        1.0.0
@@ -13,7 +13,9 @@ maintainer:     matvey.aksenov@gmail.com
 copyright:      Matvey Aksenov 2018
 license:        BSD2
 build-type:     Custom
-cabal-version:  >= 1.10
+cabal-version:  >= 1.24
+extra-source-files:
+    README.markdown
 
 custom-setup
   setup-depends:
