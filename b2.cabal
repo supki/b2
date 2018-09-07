@@ -2,7 +2,7 @@
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: b93fde21ac98ebbd1df2d2763651d531410d7b686a116b8454585979198906c7
+-- hash: bf7ab7514cbdddc3c7ce3dc782429cdacf90b5b2b598a3d6bf12917695159107
 
 name:           b2
 version:        1.0.0
@@ -25,7 +25,6 @@ library
   ghc-options: -funbox-strict-fields -Wall -Werror
   build-depends:
       aeson
-    , aeson-qq
     , base >=4.7 && <5
     , bytestring
     , case-insensitive

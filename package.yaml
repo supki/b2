@@ -18,7 +18,6 @@ default-extensions:
 library:
   dependencies:
     - aeson
-    - aeson-qq
     - bytestring
     - case-insensitive
     - conduit
