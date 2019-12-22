@@ -2,6 +2,7 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE QuasiQuotes #-}
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE StrictData #-}
 {-# LANGUAGE TypeApplications #-}
@@ -28,11 +29,14 @@ import qualified Data.Aeson as Aeson
 import qualified Data.Aeson.Types as Aeson (Pair)
 import           Data.Bifunctor (bimap)
 import           Data.ByteString (ByteString)
+import qualified Data.ByteString as BS
+import qualified Data.ByteString.Builder as BSB
 import qualified Data.ByteString.Lazy as Lazy (ByteString)
 import qualified Data.ByteString.Lazy as ByteString.Lazy
 import qualified Data.CaseInsensitive as CI
-import           Data.Conduit (ConduitT, (.|), await, runConduit, yield)
+import           Data.Conduit (ConduitT, (.|), await, runConduit, yield, Void)
 import qualified Data.Conduit.List as CL
+import           Data.Conduit.Combinators (sourceLazy)
 import           Data.Int (Int64)
 import           Data.HashMap.Strict (HashMap)
 import qualified Data.HashMap.Strict as HashMap
@@ -77,6 +81,8 @@ instance Aeson.ToJSON Error where
       , "message" .= message
       , "status" .= status
       ]
+
+instance Exception Error 
 
 data Ex
   = JsonEx Lazy.ByteString String
@@ -806,3 +812,48 @@ autoContentType =
 requestBodyJson :: [Aeson.Pair] -> Http.RequestBody
 requestBodyJson pairs =
   Http.RequestBodyLBS (Aeson.encode (Aeson.object pairs))
+
+streamUpload :: (HasBucketID bucketID)
+       => Maybe Int64 -- ^ Optional chunk size
+       -> AuthorizeAccount
+       -> bucketID
+       -> Text
+       -> Http.Manager
+       -> ConduitT ByteString Void (ResourceT IO) File
+streamUpload Nothing env bucketID filename manager = 
+  streamUpload (Just (recommendedPartSize env)) env bucketID filename manager
+streamUpload (Just chunkSize) env bucketID filename manager = do
+  fileID <- liftIO $ dieW (start_large_file env bucketID filename Nothing Nothing manager)
+  go fileID mempty 0 1 mempty
+  -- TODO: cancel_large_file env fileID manager
+  where
+    go :: LargeFile -> BSB.Builder -> Int64 -> Int64 -> [LargeFilePart] -> ConduitT ByteString Void (ResourceT IO) File
+    go fileID buffer bufferSize partNumber parts = 
+      await >>= \case
+          Just bytes -> 
+            let
+              newBufferSize = bufferSize + fromIntegral (BS.length bytes)
+              newBuffer = buffer <> BSB.byteString bytes
+            in if newBufferSize <= chunkSize
+               then
+                 go fileID newBuffer newBufferSize partNumber parts 
+               else do
+                part <- uploadPart fileID newBuffer newBufferSize partNumber
+                go fileID mempty 0 (partNumber + 1) (part : parts)
+          Nothing -> do
+            allParts <-
+              if bufferSize > 0
+              then (: parts) <$> uploadPart fileID buffer bufferSize partNumber
+              else pure $ parts
+            liftIO $ dieW $ finish_large_file env fileID (reverse allParts) manager
+                
+    uploadPart :: LargeFile -> BSB.Builder -> Int64 -> Int64 -> ConduitT ByteString Void (ResourceT IO) LargeFilePart
+    uploadPart fileID buffer bufferSize partNumber = do
+      url <- liftIO $ dieW $ B2.get_upload_part_url env fileID manager
+      liftIO $ dieW $ B2.upload_part url partNumber bufferSize (sourceLazy $ BSB.toLazyByteString buffer) manager
+        
+
+dieW :: (Exception e) => IO (Either e a) -> IO a
+dieW x = do
+  res <- x
+  either throwIO pure res
