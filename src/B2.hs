@@ -813,45 +813,51 @@ requestBodyJson :: [Aeson.Pair] -> Http.RequestBody
 requestBodyJson pairs =
   Http.RequestBodyLBS (Aeson.encode (Aeson.object pairs))
 
-streamUpload :: (HasBucketID bucketID)
-       => Maybe Int64 -- ^ Optional chunk size
-       -> AuthorizeAccount
-       -> bucketID
-       -> Text
-       -> Http.Manager
-       -> ConduitT ByteString Void (ResourceT IO) File
-streamUpload Nothing env bucketID filename manager = 
+streamUpload ::
+  (HasBucketID bucketID) =>
+  -- | Optional chunk size
+  Maybe Int64 ->
+  AuthorizeAccount ->
+  bucketID ->
+  Text ->
+  Http.Manager ->
+  ConduitT ByteString Void (ResourceT IO) File
+streamUpload Nothing env bucketID filename manager =
   streamUpload (Just (recommendedPartSize env)) env bucketID filename manager
 streamUpload (Just chunkSize) env bucketID filename manager = do
-  fileID <- liftIO $ dieW (start_large_file env bucketID filename Nothing Nothing manager)
-  go fileID mempty 0 1 mempty
-  -- TODO: cancel_large_file env fileID manager
+  go Nothing mempty 0 1 mempty
   where
-    go :: LargeFile -> BSB.Builder -> Int64 -> Int64 -> [LargeFilePart] -> ConduitT ByteString Void (ResourceT IO) File
-    go fileID buffer bufferSize partNumber parts = 
+    -- TODO: cancel_large_file env fileID manager
+
+    go :: Maybe LargeFile -> BSB.Builder -> Int64 -> Int64 -> [LargeFilePart] -> ConduitT ByteString Void (ResourceT IO) File
+    go maybeFileID buffer bufferSize partNumber parts =
       await >>= \case
-          Just bytes -> 
-            let
-              newBufferSize = bufferSize + fromIntegral (BS.length bytes)
-              newBuffer = buffer <> BSB.byteString bytes
-            in if newBufferSize <= chunkSize
-               then
-                 go fileID newBuffer newBufferSize partNumber parts 
-               else do
-                part <- uploadPart fileID newBuffer newBufferSize partNumber
-                go fileID mempty 0 (partNumber + 1) (part : parts)
-          Nothing -> do
-            allParts <-
-              if bufferSize > 0
-              then (: parts) <$> uploadPart fileID buffer bufferSize partNumber
-              else pure $ parts
-            liftIO $ dieW $ finish_large_file env fileID (reverse allParts) manager
-                
-    uploadPart :: LargeFile -> BSB.Builder -> Int64 -> Int64 -> ConduitT ByteString Void (ResourceT IO) LargeFilePart
-    uploadPart fileID buffer bufferSize partNumber = do
+        Just bytes ->
+          let newBufferSize = fromIntegral (BS.length bytes)
+              totalBufferSize = bufferSize + newBufferSize
+           in if totalBufferSize <= chunkSize
+                then go maybeFileID (buffer <> BSB.byteString bytes) totalBufferSize partNumber parts
+                else do
+                  (part, fileID) <- uploadPart maybeFileID buffer bufferSize partNumber
+                  go (Just fileID) (mempty <> BSB.byteString bytes) newBufferSize (partNumber + 1) (part : parts)
+        Nothing -> do
+          if partNumber == 1
+            then do
+              uploadUrl <- liftIO $ dieW (B2.get_upload_url env bucketID manager)
+              liftIO $ dieW $ B2.upload_file uploadUrl filename bufferSize (sourceLazy $ BSB.toLazyByteString buffer) Nothing Nothing manager
+            else do
+              (part, fileID) <- uploadPart maybeFileID buffer bufferSize partNumber
+              liftIO $ dieW $ finish_large_file env fileID (reverse (part : parts)) manager
+    
+    uploadPart :: Maybe LargeFile -> BSB.Builder -> Int64 -> Int64 -> ConduitT ByteString Void (ResourceT IO) (LargeFilePart, LargeFile)
+    uploadPart Nothing buffer bufferSize partNumber = do
+      fileID <- liftIO $ dieW (start_large_file env bucketID filename Nothing Nothing manager)
+      uploadPart (Just fileID) buffer bufferSize partNumber
+    uploadPart (Just fileID) buffer bufferSize partNumber = do
       url <- liftIO $ dieW $ B2.get_upload_part_url env fileID manager
-      liftIO $ dieW $ B2.upload_part url partNumber bufferSize (sourceLazy $ BSB.toLazyByteString buffer) manager
-        
+      part <- liftIO $ dieW $ B2.upload_part url partNumber bufferSize (sourceLazy $ BSB.toLazyByteString buffer) manager
+      return (part, fileID)
+
 
 dieW :: (Exception e) => IO (Either e a) -> IO a
 dieW x = do
