@@ -4,6 +4,7 @@
 {-# LANGUAGE QuasiQuotes #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE StrictData #-}
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeFamilies #-}
@@ -19,7 +20,8 @@ module B2
   , module B2
   ) where
 
-import           Control.Exception (Exception, throwIO)
+import           Control.Concurrent (threadDelay)
+import           Control.Exception (Exception, throwIO, SomeException, catch)
 import           Control.Monad (join)
 import           Control.Monad.IO.Class (MonadIO(..))
 import           Control.Monad.Trans.Resource (MonadResource, ResourceT)
@@ -34,7 +36,7 @@ import qualified Data.ByteString.Builder as BSB
 import qualified Data.ByteString.Lazy as Lazy (ByteString)
 import qualified Data.ByteString.Lazy as ByteString.Lazy
 import qualified Data.CaseInsensitive as CI
-import           Data.Conduit (ConduitT, (.|), await, runConduit, yield, Void)
+import           Data.Conduit (ConduitT, (.|), await, runConduit, yield, Void, handleC)
 import qualified Data.Conduit.List as CL
 import           Data.Conduit.Combinators (sourceLazy)
 import           Data.Int (Int64)
@@ -827,10 +829,8 @@ streamUpload Nothing env bucketID filename manager =
 streamUpload (Just chunkSize) env bucketID filename manager = do
   go Nothing mempty 0 1 mempty
   where
-    -- TODO: cancel_large_file env fileID manager
-
     go :: Maybe LargeFile -> BSB.Builder -> Int64 -> Int64 -> [LargeFilePart] -> ConduitT ByteString Void (ResourceT IO) File
-    go maybeFileID buffer bufferSize partNumber parts =
+    go maybeFileID buffer bufferSize partNumber parts = handleC (handler maybeFileID) $
       await >>= \case
         Just bytes ->
           let newBufferSize = fromIntegral (BS.length bytes)
@@ -842,12 +842,12 @@ streamUpload (Just chunkSize) env bucketID filename manager = do
                   go (Just fileID) (mempty <> BSB.byteString bytes) newBufferSize (partNumber + 1) (part : parts)
         Nothing -> do
           if partNumber == 1
-            then do
-              uploadUrl <- liftIO $ dieW (B2.get_upload_url env bucketID manager)
-              liftIO $ dieW $ B2.upload_file uploadUrl filename bufferSize (sourceLazy $ BSB.toLazyByteString buffer) Nothing Nothing manager
-            else do
-              (part, fileID) <- uploadPart maybeFileID buffer bufferSize partNumber
-              liftIO $ dieW $ finish_large_file env fileID (reverse (part : parts)) manager
+          then do
+            uploadUrl <- liftIO $ dieW (B2.get_upload_url env bucketID manager)
+            liftIO $ dieW $ B2.upload_file uploadUrl filename bufferSize (sourceLazy $ BSB.toLazyByteString buffer) Nothing Nothing manager
+          else do
+            (part, fileID) <- uploadPart maybeFileID buffer bufferSize partNumber
+            liftIO $ dieW $ finish_large_file env fileID (reverse (part : parts)) manager
     
     uploadPart :: Maybe LargeFile -> BSB.Builder -> Int64 -> Int64 -> ConduitT ByteString Void (ResourceT IO) (LargeFilePart, LargeFile)
     uploadPart Nothing buffer bufferSize partNumber = do
@@ -858,8 +858,28 @@ streamUpload (Just chunkSize) env bucketID filename manager = do
       part <- liftIO $ dieW $ B2.upload_part url partNumber bufferSize (sourceLazy $ BSB.toLazyByteString buffer) manager
       return (part, fileID)
 
+    handler :: Maybe LargeFile -> SomeException -> ConduitT ByteString Void (ResourceT IO) File
+    handler Nothing exc = liftIO $ throwIO exc
+    handler (Just fileID) exc = do
+      _ <- liftIO $ dieW $ cancel_large_file env fileID manager
+      handler Nothing exc
+
+retry ::
+  -- | Seconds
+  [Double] ->
+  IO a ->
+  IO a
+retry delaysSeconds io = loop delaysSeconds
+  where
+    loop [] = io
+    loop (delay : delays) = catch io $ \(_ :: SomeException) -> do
+      liftIO $ threadDelay (floor $ delay * 1000 * 1000)
+      loop delays
+
+retryThreeTimes :: IO a -> IO a
+retryThreeTimes = retry [0, 0, 0]
 
 dieW :: (Exception e) => IO (Either e a) -> IO a
-dieW x = do
+dieW x = retryThreeTimes $ do
   res <- x
   either throwIO pure res
