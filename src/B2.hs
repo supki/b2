@@ -877,7 +877,7 @@ retry delaysSeconds io = loop delaysSeconds
       loop delays
 
 retryThreeTimes :: IO a -> IO a
-retryThreeTimes = retry [0, 0, 0]
+retryThreeTimes = retry [0.1, 0.3, 0.5]
 
 dieW :: (Exception e) => IO (Either e a) -> IO a
 dieW x = retryThreeTimes $ do
