@@ -836,24 +836,26 @@ streamUpload (Just chunkSize) env bucketID filename manager = do
           let newBufferSize = fromIntegral (BS.length bytes)
               totalBufferSize = bufferSize + newBufferSize
            in if totalBufferSize <= chunkSize
-                then go maybeFileID (buffer <> BSB.byteString bytes) totalBufferSize partNumber parts
-                else do
-                  (part, fileID) <- uploadPart maybeFileID buffer bufferSize partNumber
-                  go (Just fileID) (mempty <> BSB.byteString bytes) newBufferSize (partNumber + 1) (part : parts)
+              then go maybeFileID (buffer <> BSB.byteString bytes) totalBufferSize partNumber parts
+              else do
+                (part, fileID) <- liftIO $ uploadPart maybeFileID buffer bufferSize partNumber
+                go (Just fileID) (mempty <> BSB.byteString bytes) newBufferSize (partNumber + 1) (part : parts)
         Nothing -> do
           if partNumber == 1
-          then do
-            uploadUrl <- liftIO $ dieW (B2.get_upload_url env bucketID manager)
-            liftIO $ dieW $ B2.upload_file uploadUrl filename bufferSize (sourceLazy $ BSB.toLazyByteString buffer) Nothing Nothing manager
-          else do
+          -- retry: if uploading fails, we need to get new upload url
+          then liftIO $ retrySimple $ do
+            uploadUrl <- dieW (B2.get_upload_url env bucketID manager)
+            dieW $ B2.upload_file uploadUrl filename bufferSize (sourceLazy $ BSB.toLazyByteString buffer) Nothing Nothing manager
+          else liftIO $ do
             (part, fileID) <- uploadPart maybeFileID buffer bufferSize partNumber
-            liftIO $ dieW $ finish_large_file env fileID (reverse (part : parts)) manager
+            retrySimple $ dieW $ B2.finish_large_file env fileID (reverse (part : parts)) manager
     
-    uploadPart :: Maybe LargeFile -> BSB.Builder -> Int64 -> Int64 -> ConduitT ByteString Void (ResourceT IO) (LargeFilePart, LargeFile)
+    uploadPart :: Maybe LargeFile -> BSB.Builder -> Int64 -> Int64 -> IO (LargeFilePart, LargeFile)
     uploadPart Nothing buffer bufferSize partNumber = do
-      fileID <- liftIO $ dieW (start_large_file env bucketID filename Nothing Nothing manager)
+      fileID <- liftIO $ retrySimple $ dieW (start_large_file env bucketID filename Nothing Nothing manager)
       uploadPart (Just fileID) buffer bufferSize partNumber
-    uploadPart (Just fileID) buffer bufferSize partNumber = do
+    -- retry: if uploading a part fails, we need to get new part url
+    uploadPart (Just fileID) buffer bufferSize partNumber = retrySimple $ do
       url <- liftIO $ dieW $ B2.get_upload_part_url env fileID manager
       part <- liftIO $ dieW $ B2.upload_part url partNumber bufferSize (sourceLazy $ BSB.toLazyByteString buffer) manager
       return (part, fileID)
@@ -861,7 +863,7 @@ streamUpload (Just chunkSize) env bucketID filename manager = do
     handler :: Maybe LargeFile -> SomeException -> ConduitT ByteString Void (ResourceT IO) File
     handler Nothing exc = liftIO $ throwIO exc
     handler (Just fileID) exc = do
-      _ <- liftIO $ dieW $ cancel_large_file env fileID manager
+      _ <- liftIO $ retrySimple $ dieW $ B2.cancel_large_file env fileID manager
       handler Nothing exc
 
 retry ::
@@ -876,7 +878,11 @@ retry delaysSeconds io = loop delaysSeconds
       liftIO $ threadDelay (floor $ delay * 1000 * 1000)
       loop delays
 
+retrySimple :: IO a -> IO a
+retrySimple =
+  retry [0.0, 0.1, 0.2, 0.3, 0.5, 1]
+
 dieW :: (Exception e) => IO (Either e a) -> IO a
-dieW x = retry [0.0, 0.0, 0.1, 0.1, 0.1, 0.5, 0.5, 0.5] $ do
+dieW x = do
   res <- x
   either throwIO pure res
