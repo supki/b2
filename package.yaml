@@ -19,6 +19,9 @@ library:
   dependencies:
     - aeson
     - bytestring
+    - bytestring-to-vector
+    - conduit-concurrent-map
+    - vector
     - case-insensitive
     - conduit
     - cryptonite

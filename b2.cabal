@@ -1,8 +1,10 @@
--- This file has been generated from package.yaml by hpack version 0.28.2.
+cabal-version: 1.12
+
+-- This file has been generated from package.yaml by hpack version 0.31.2.
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: bf7ab7514cbdddc3c7ce3dc782429cdacf90b5b2b598a3d6bf12917695159107
+-- hash: 602e7a916ae4ad2da2e049ee007c234c54ba4e72cd9393c69bc851764ac2d8d8
 
 name:           b2
 version:        1.0.0
@@ -14,7 +16,6 @@ copyright:      Matvey Aksenov 2018
 license:        BSD2
 license-file:   LICENSE
 build-type:     Simple
-cabal-version:  >= 1.10
 extra-source-files:
     README.markdown
 
@@ -27,14 +28,17 @@ library
       aeson
     , base >=4.7 && <5
     , bytestring
+    , bytestring-to-vector
     , case-insensitive
     , conduit
+    , conduit-concurrent-map
     , cryptonite
     , http-conduit
     , http-types
     , resourcet
     , text
     , unordered-containers
+    , vector
   exposed-modules:
       B2
       B2.AuthorizationToken

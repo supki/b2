@@ -22,7 +22,7 @@ module B2
 
 import           Control.Concurrent (threadDelay)
 import           Control.Exception (Exception, throwIO, SomeException, catch)
-import           Control.Monad (join)
+import           Control.Monad (join, forM_)
 import           Control.Monad.IO.Class (MonadIO(..))
 import           Control.Monad.Trans.Resource (MonadResource, ResourceT)
 import qualified Crypto.Hash as Hash
@@ -30,15 +30,20 @@ import           Data.Aeson ((.:), (.=))
 import qualified Data.Aeson as Aeson
 import qualified Data.Aeson.Types as Aeson (Pair)
 import           Data.Bifunctor (bimap)
+import           Data.Word (Word8)
+import           Data.ByteString.Unsafe        (unsafeIndex)
 import           Data.ByteString (ByteString)
 import qualified Data.ByteString as BS
-import qualified Data.ByteString.Builder as BSB
 import qualified Data.ByteString.Lazy as Lazy (ByteString)
 import qualified Data.ByteString.Lazy as ByteString.Lazy
+import qualified Data.Vector.Storable as VS
+import           Data.Vector.Storable.ByteString (vectorToByteString)
 import qualified Data.CaseInsensitive as CI
-import           Data.Conduit (ConduitT, (.|), await, runConduit, yield, Void, handleC)
+import           Conduit (mapC)
+import           Data.Conduit (ConduitT, (.|), await, runConduit, yield, Void, leftover, handleC, awaitForever)
 import qualified Data.Conduit.List as CL
-import           Data.Conduit.Combinators (sourceLazy)
+import           Data.Conduit.Combinators (vectorBuilder, sinkList)
+import           Data.Conduit.ConcurrentMap (concurrentMapM_)
 import           Data.Int (Int64)
 import           Data.HashMap.Strict (HashMap)
 import qualified Data.HashMap.Strict as HashMap
@@ -47,7 +52,7 @@ import           Data.Monoid ((<>))
 import           Data.String (IsString(fromString))
 import           Data.Text (Text)
 import qualified Data.Text.Encoding as Text
-import           Prelude hiding (id)
+import           Prelude hiding (id, concatMap)
 import qualified Network.HTTP.Conduit as Http
 import qualified Network.HTTP.Types as Http
 import           Text.Printf (printf)
@@ -826,45 +831,67 @@ streamUpload ::
   ConduitT ByteString Void (ResourceT IO) File
 streamUpload Nothing env bucketID filename manager =
   streamUpload (Just (recommendedPartSize env)) env bucketID filename manager
-streamUpload (Just chunkSize) env bucketID filename manager = do
-  go Nothing mempty 0 1 mempty
+streamUpload (Just chunkSize) env bucketID filename manager =
+   chunkConduit -- chunk input stream by chunkSize
+  .| mapC vectorToByteString -- convert word8 back to bytestring
+  .| enumerateConduit -- enumerate all chunks starting with 1
+  .| deciderConduit -- invoke single or multi upload
   where
-    go :: Maybe LargeFile -> BSB.Builder -> Int64 -> Int64 -> [LargeFilePart] -> ConduitT ByteString Void (ResourceT IO) File
-    go maybeFileID buffer bufferSize partNumber parts = handleC (handler maybeFileID) $
-      await >>= \case
-        Just bytes ->
-          let newBufferSize = fromIntegral (BS.length bytes)
-              totalBufferSize = bufferSize + newBufferSize
-           in if totalBufferSize <= chunkSize
-              then go maybeFileID (buffer <> BSB.byteString bytes) totalBufferSize partNumber parts
-              else do
-                (part, fileID) <- liftIO $ uploadPart maybeFileID buffer bufferSize partNumber
-                go (Just fileID) (mempty <> BSB.byteString bytes) newBufferSize (partNumber + 1) (part : parts)
-        Nothing -> do
-          if partNumber == 1
-          -- retry: if uploading fails, we need to get new upload url
-          then liftIO $ retrySimple $ do
-            uploadUrl <- dieW (B2.get_upload_url env bucketID manager)
-            dieW $ B2.upload_file uploadUrl filename bufferSize (sourceLazy $ BSB.toLazyByteString buffer) Nothing Nothing manager
-          else liftIO $ do
-            (part, fileID) <- uploadPart maybeFileID buffer bufferSize partNumber
-            retrySimple $ dieW $ B2.finish_large_file env fileID (reverse (part : parts)) manager
-    
-    uploadPart :: Maybe LargeFile -> BSB.Builder -> Int64 -> Int64 -> IO (LargeFilePart, LargeFile)
-    uploadPart Nothing buffer bufferSize partNumber = do
-      fileID <- liftIO $ retrySimple $ dieW (start_large_file env bucketID filename Nothing Nothing manager)
-      uploadPart (Just fileID) buffer bufferSize partNumber
-    -- retry: if uploading a part fails, we need to get new part url
-    uploadPart (Just fileID) buffer bufferSize partNumber = retrySimple $ do
-      url <- liftIO $ dieW $ B2.get_upload_part_url env fileID manager
-      part <- liftIO $ dieW $ B2.upload_part url partNumber bufferSize (sourceLazy $ BSB.toLazyByteString buffer) manager
-      return (part, fileID)
+    chunkConduit :: ConduitT ByteString (VS.Vector Word8) (ResourceT IO) ()
+    chunkConduit =
+      vectorBuilder (fromIntegral chunkSize) $ \yieldByte -> do
+        awaitForever $ \bs ->
+          liftIO . forM_ [0..BS.length bs - 1] $ \i ->
+            yieldByte $ unsafeIndex bs i
+    {-# INLINE chunkConduit #-}
+  
+    enumerateConduit :: MonadIO m => ConduitT a (Int, a) m ()
+    enumerateConduit = loop 1
+      where
+        loop i = await >>= maybe (return ()) (go i)
+        go i x = do
+          yield (i, x)
+          loop (i + 1)
+    {-# INLINE enumerateConduit #-}
 
-    handler :: Maybe LargeFile -> SomeException -> ConduitT ByteString Void (ResourceT IO) File
-    handler Nothing exc = liftIO $ throwIO exc
-    handler (Just fileID) exc = do
-      _ <- liftIO $ retrySimple $ dieW $ B2.cancel_large_file env fileID manager
-      handler Nothing exc
+    -- single or multiple parts?
+    deciderConduit :: ConduitT (Int, ByteString) Void (ResourceT IO) File
+    deciderConduit = do
+      input1 <- await
+      input2 <- await
+      case (input1, input2) of
+        (Nothing, Nothing) -> liftIO $ error "no input"
+        (Just (_, buffer), Nothing) -> do
+          liftIO $ retrySimple $ do
+            -- retry: if uploading fails, we need to get new upload url
+            uploadUrl <- dieW (B2.get_upload_url env bucketID manager)
+            dieW $ B2.upload_file uploadUrl filename (fromIntegral $ BS.length buffer) (yield buffer) Nothing Nothing manager
+        (Just a, Just b) -> do
+          leftover b
+          leftover a
+          multiUploadConduit
+        (Nothing, Just _) -> error "this should never have happen: received EOL before first input"
+
+    multiUploadConduit :: ConduitT (Int, ByteString) Void (ResourceT IO) File
+    multiUploadConduit = do
+      fileID <- liftIO $ retrySimple $ dieW (start_large_file env bucketID filename Nothing Nothing manager)
+      handleC (handler fileID) $ concurrentMapM_ 20 4 (multiUpload fileID) .| (finishMultiUploadConduit fileID)
+
+    multiUpload :: LargeFile -> (Int, ByteString) -> (ResourceT IO) LargeFilePart
+    multiUpload fileID (i, buffer) = liftIO $ retrySimple $ do
+      putStrLn $ show i
+      url <- dieW $ B2.get_upload_part_url env fileID manager
+      dieW $ B2.upload_part url (fromIntegral i) (fromIntegral $ BS.length buffer) (yield buffer) manager
+
+    finishMultiUploadConduit :: LargeFile -> ConduitT LargeFilePart Void (ResourceT IO) File
+    finishMultiUploadConduit fileID = do
+      parts <- sinkList
+      liftIO $ retrySimple $ dieW $ B2.finish_large_file env fileID parts manager
+
+    handler :: MonadIO m => LargeFile -> SomeException -> ConduitT i o m r
+    handler fileID exc = liftIO $ do
+      _ <- retrySimple $ dieW $ B2.cancel_large_file env fileID manager
+      throwIO exc
 
 retry ::
   -- | Seconds
