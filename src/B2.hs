@@ -862,8 +862,8 @@ streamUpload (Just chunkSize) env bucketID filename manager =
       case (input1, input2) of
         (Nothing, Nothing) -> liftIO $ error "no input"
         (Just (_, buffer), Nothing) -> do
+          -- retry: if uploading fails, we need to get new upload url
           liftIO $ retrySimple $ do
-            -- retry: if uploading fails, we need to get new upload url
             uploadUrl <- dieW (B2.get_upload_url env bucketID manager)
             dieW $ B2.upload_file uploadUrl filename (fromIntegral $ BS.length buffer) (yield buffer) Nothing Nothing manager
         (Just a, Just b) -> do
@@ -879,7 +879,6 @@ streamUpload (Just chunkSize) env bucketID filename manager =
 
     multiUpload :: LargeFile -> (Int, ByteString) -> (ResourceT IO) LargeFilePart
     multiUpload fileID (i, buffer) = liftIO $ retrySimple $ do
-      putStrLn $ show i
       url <- dieW $ B2.get_upload_part_url env fileID manager
       dieW $ B2.upload_part url (fromIntegral i) (fromIntegral $ BS.length buffer) (yield buffer) manager
 
