@@ -28,6 +28,7 @@ library:
     - http-conduit
     - http-types
     - resourcet
+    - safe-exceptions
     - text
     - unordered-containers
   source-dirs:

@@ -21,7 +21,7 @@ module B2
   ) where
 
 import           Control.Concurrent (threadDelay)
-import           Control.Exception (Exception, throwIO, SomeException, catch)
+import           Control.Exception.Safe (Exception, throwIO, SomeException, catch)
 import           Control.Monad (join, forM_)
 import           Control.Monad.IO.Class (MonadIO(..))
 import           Control.Monad.Trans.Resource (MonadResource, ResourceT)

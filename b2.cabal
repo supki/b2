@@ -4,7 +4,7 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 602e7a916ae4ad2da2e049ee007c234c54ba4e72cd9393c69bc851764ac2d8d8
+-- hash: b6572faef956ab5bbf6395a1d9cf7206cb0aa6b7592135271c0dcc6ab3d73ed7
 
 name:           b2
 version:        1.0.0
@@ -36,6 +36,7 @@ library
     , http-conduit
     , http-types
     , resourcet
+    , safe-exceptions
     , text
     , unordered-containers
     , vector
