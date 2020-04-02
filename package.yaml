@@ -36,7 +36,6 @@ library:
   ghc-options:
     - -funbox-strict-fields
     - -Wall
-    - -Werror
 
 tests:
   spec:
