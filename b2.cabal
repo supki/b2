@@ -4,7 +4,7 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: b6572faef956ab5bbf6395a1d9cf7206cb0aa6b7592135271c0dcc6ab3d73ed7
+-- hash: d393af900a651bee34c90ccdca82059549f69b321ef71acf438931c3701cc758
 
 name:           b2
 version:        1.0.0
@@ -23,7 +23,7 @@ library
   hs-source-dirs:
       src
   default-extensions: OverloadedStrings
-  ghc-options: -funbox-strict-fields -Wall -Werror
+  ghc-options: -funbox-strict-fields -Wall
   build-depends:
       aeson
     , base >=4.7 && <5
