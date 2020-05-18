@@ -22,7 +22,7 @@ module B2
 
 import           Control.Concurrent (threadDelay)
 import           Control.Exception.Safe (Exception, throwIO, SomeException, catch)
-import           Control.Monad (join, forM_)
+import           Control.Monad (join)
 import           Control.Monad.IO.Class (MonadIO(..))
 import           Control.Monad.Trans.Resource (MonadResource, ResourceT)
 import qualified Crypto.Hash as Hash
@@ -30,19 +30,14 @@ import           Data.Aeson ((.:), (.=))
 import qualified Data.Aeson as Aeson
 import qualified Data.Aeson.Types as Aeson (Pair)
 import           Data.Bifunctor (bimap)
-import           Data.Word (Word8)
-import           Data.ByteString.Unsafe        (unsafeIndex)
 import           Data.ByteString (ByteString)
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Lazy as Lazy (ByteString)
 import qualified Data.ByteString.Lazy as ByteString.Lazy
-import qualified Data.Vector.Storable as VS
-import           Data.Vector.Storable.ByteString (vectorToByteString)
 import qualified Data.CaseInsensitive as CI
-import           Conduit (mapC)
-import           Data.Conduit (ConduitT, (.|), await, runConduit, yield, Void, leftover, handleC, awaitForever)
+import           Data.Conduit (ConduitT, (.|), await, runConduit, yield, Void, leftover, handleC)
 import qualified Data.Conduit.List as CL
-import           Data.Conduit.Combinators (vectorBuilder, sinkList)
+import           Data.Conduit.Combinators (sinkList)
 import           Data.Conduit.ConcurrentMap (concurrentMapM_)
 import           Data.Int (Int64)
 import           Data.HashMap.Strict (HashMap)
@@ -59,6 +54,7 @@ import           Text.Printf (printf)
 
 import           B2.AuthorizationToken
 import           B2.Bucket
+import           B2.Chunk
 import           B2.ID
 import           B2.File
 import           B2.LargeFile
@@ -832,19 +828,10 @@ streamUpload ::
 streamUpload Nothing env bucketID filename manager =
   streamUpload (Just (recommendedPartSize env)) env bucketID filename manager
 streamUpload (Just chunkSize) env bucketID filename manager =
-   chunkConduit -- chunk input stream by chunkSize
-  .| mapC vectorToByteString -- convert word8 back to bytestring
+   chunkBySize (fromIntegral chunkSize) -- chunk input stream by chunkSize
   .| enumerateConduit -- enumerate all chunks starting with 1
   .| deciderConduit -- invoke single or multi upload
   where
-    chunkConduit :: ConduitT ByteString (VS.Vector Word8) (ResourceT IO) ()
-    chunkConduit =
-      vectorBuilder (fromIntegral chunkSize) $ \yieldByte -> do
-        awaitForever $ \bs ->
-          liftIO . forM_ [0..BS.length bs - 1] $ \i ->
-            yieldByte $ unsafeIndex bs i
-    {-# INLINE chunkConduit #-}
-  
     enumerateConduit :: MonadIO m => ConduitT a (Int, a) m ()
     enumerateConduit = loop 1
       where

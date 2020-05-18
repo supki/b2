@@ -4,7 +4,7 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: d393af900a651bee34c90ccdca82059549f69b321ef71acf438931c3701cc758
+-- hash: 6d4abd5830e13f67bdc04eaa73b0c5ca6b935d8793b1c8ab727b0de63c9f41da
 
 name:           b2
 version:        1.0.0
@@ -28,7 +28,6 @@ library
       aeson
     , base >=4.7 && <5
     , bytestring
-    , bytestring-to-vector
     , case-insensitive
     , conduit
     , conduit-concurrent-map
@@ -44,6 +43,7 @@ library
       B2
       B2.AuthorizationToken
       B2.Bucket
+      B2.Chunk
       B2.File
       B2.ID
       B2.Key
