@@ -862,7 +862,7 @@ streamUpload (Just chunkSize) env bucketID filename manager =
     multiUploadConduit :: ConduitT (Int, ByteString) Void (ResourceT IO) File
     multiUploadConduit = do
       fileID <- liftIO $ retrySimple $ dieW (start_large_file env bucketID filename Nothing Nothing manager)
-      handleC (handler fileID) $ concurrentMapM_ 20 4 (multiUpload fileID) .| (finishMultiUploadConduit fileID)
+      handleC (handler fileID) $ concurrentMapM_ 3 1 (multiUpload fileID) .| (finishMultiUploadConduit fileID)
 
     multiUpload :: LargeFile -> (Int, ByteString) -> (ResourceT IO) LargeFilePart
     multiUpload fileID (i, buffer) = liftIO $ retrySimple $ do
