@@ -47,6 +47,7 @@ import           Data.Monoid ((<>))
 import           Data.String (IsString(fromString))
 import           Data.Text (Text)
 import qualified Data.Text.Encoding as Text
+import           GHC.Stack (HasCallStack, prettyCallStack, callStack)
 import           Prelude hiding (id, concatMap)
 import qualified Network.HTTP.Conduit as Http
 import qualified Network.HTTP.Types as Http
@@ -111,6 +112,7 @@ cancel_large_file
   :: ( HasFileID fileID
      , HasBaseUrl env
      , HasAuthorizationToken env
+     , HasCallStack
      )
   => env
   -> fileID
@@ -590,6 +592,7 @@ update_bucket env bucket type_ info cors lifecycle revision man = do
 upload_file
   :: ( HasUploadUrl env
      , HasAuthorizationToken env
+     , HasCallStack
      )
   => env
   -> Text
@@ -607,6 +610,7 @@ upload_file env name size contents contentType info man = do
 upload_part
   :: ( HasUploadPartUrl env
      , HasAuthorizationToken env
+     , HasCallStack
      )
   => env
   -> Int64
@@ -842,7 +846,7 @@ streamUpload (Just chunkSize) env bucketID filename manager =
     {-# INLINE enumerateConduit #-}
 
     -- single or multiple parts?
-    deciderConduit :: ConduitT (Int, ByteString) Void (ResourceT IO) File
+    deciderConduit :: HasCallStack => ConduitT (Int, ByteString) Void (ResourceT IO) File
     deciderConduit = do
       input1 <- await
       input2 <- await
@@ -859,24 +863,25 @@ streamUpload (Just chunkSize) env bucketID filename manager =
           multiUploadConduit
         (Nothing, Just _) -> error "this should never have happen: received EOL before first input"
 
-    multiUploadConduit :: ConduitT (Int, ByteString) Void (ResourceT IO) File
+    multiUploadConduit :: HasCallStack => ConduitT (Int, ByteString) Void (ResourceT IO) File
     multiUploadConduit = do
       fileID <- liftIO $ retrySimple $ dieW (start_large_file env bucketID filename Nothing Nothing manager)
       handleC (handler fileID) $ concurrentMapM_ 3 1 (multiUpload fileID) .| (finishMultiUploadConduit fileID)
 
-    multiUpload :: LargeFile -> (Int, ByteString) -> (ResourceT IO) LargeFilePart
+    multiUpload :: HasCallStack => LargeFile -> (Int, ByteString) -> (ResourceT IO) LargeFilePart
     multiUpload fileID (i, buffer) = liftIO $ retrySimple $ do
       url <- dieW $ B2.get_upload_part_url env fileID manager
       dieW $ B2.upload_part url (fromIntegral i) (fromIntegral $ BS.length buffer) (yield buffer) manager
 
-    finishMultiUploadConduit :: LargeFile -> ConduitT LargeFilePart Void (ResourceT IO) File
+    finishMultiUploadConduit :: HasCallStack => LargeFile -> ConduitT LargeFilePart Void (ResourceT IO) File
     finishMultiUploadConduit fileID = do
       parts <- sinkList
       liftIO $ retrySimple $ dieW $ B2.finish_large_file env fileID parts manager
 
-    handler :: MonadIO m => LargeFile -> SomeException -> ConduitT i o m r
+    handler :: (HasCallStack, MonadIO m) => LargeFile -> SomeException -> ConduitT i o m r
     handler fileID exc = liftIO $ do
       _ <- retrySimple $ dieW $ B2.cancel_large_file env fileID manager
+      putStrLn $ prettyCallStack callStack
       throwIO exc
 
 retry ::
@@ -898,4 +903,8 @@ retrySimple =
 dieW :: (Exception e) => IO (Either e a) -> IO a
 dieW x = do
   res <- x
-  either throwIO pure res
+  either action pure res
+  where
+    action exc = do
+      putStrLn $ prettyCallStack callStack
+      throwIO exc
