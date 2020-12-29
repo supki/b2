@@ -880,7 +880,7 @@ streamUpload (Just chunkSize) env bucketID filename manager =
 
     handler :: (HasCallStack, MonadIO m) => LargeFile -> SomeException -> ConduitT i o m r
     handler fileID exc = liftIO $ do
-      _ <- retrySimple $ dieW $ B2.cancel_large_file env fileID manager
+      _ <- dieW $ B2.cancel_large_file env fileID manager
       putStrLn $ prettyCallStack callStack
       throwIO exc
 
