@@ -2,7 +2,9 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE QuasiQuotes #-}
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE StrictData #-}
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeFamilies #-}
@@ -18,7 +20,8 @@ module B2
   , module B2
   ) where
 
-import           Control.Exception (Exception, throwIO)
+import           Control.Concurrent (threadDelay)
+import           Control.Exception.Safe (Exception, throwIO, SomeException, catch)
 import           Control.Monad (join)
 import           Control.Monad.IO.Class (MonadIO(..))
 import           Control.Monad.Trans.Resource (MonadResource, ResourceT)
@@ -28,11 +31,14 @@ import qualified Data.Aeson as Aeson
 import qualified Data.Aeson.Types as Aeson (Pair)
 import           Data.Bifunctor (bimap)
 import           Data.ByteString (ByteString)
+import qualified Data.ByteString as BS
 import qualified Data.ByteString.Lazy as Lazy (ByteString)
 import qualified Data.ByteString.Lazy as ByteString.Lazy
 import qualified Data.CaseInsensitive as CI
-import           Data.Conduit (ConduitT, (.|), await, runConduit, yield)
+import           Data.Conduit (ConduitT, (.|), await, runConduit, yield, Void, leftover, handleC)
 import qualified Data.Conduit.List as CL
+import           Data.Conduit.Combinators (sinkList)
+import           Data.Conduit.ConcurrentMap (concurrentMapM_)
 import           Data.Int (Int64)
 import           Data.HashMap.Strict (HashMap)
 import qualified Data.HashMap.Strict as HashMap
@@ -41,13 +47,15 @@ import           Data.Monoid ((<>))
 import           Data.String (IsString(fromString))
 import           Data.Text (Text)
 import qualified Data.Text.Encoding as Text
-import           Prelude hiding (id)
+import           GHC.Stack (HasCallStack, prettyCallStack, callStack)
+import           Prelude hiding (id, concatMap)
 import qualified Network.HTTP.Conduit as Http
 import qualified Network.HTTP.Types as Http
 import           Text.Printf (printf)
 
 import           B2.AuthorizationToken
 import           B2.Bucket
+import           B2.Chunk
 import           B2.ID
 import           B2.File
 import           B2.LargeFile
@@ -78,6 +86,8 @@ instance Aeson.ToJSON Error where
       , "status" .= status
       ]
 
+instance Exception Error 
+
 data Ex
   = JsonEx Lazy.ByteString String
     deriving (Show, Eq)
@@ -102,6 +112,7 @@ cancel_large_file
   :: ( HasFileID fileID
      , HasBaseUrl env
      , HasAuthorizationToken env
+     , HasCallStack
      )
   => env
   -> fileID
@@ -581,6 +592,7 @@ update_bucket env bucket type_ info cors lifecycle revision man = do
 upload_file
   :: ( HasUploadUrl env
      , HasAuthorizationToken env
+     , HasCallStack
      )
   => env
   -> Text
@@ -598,6 +610,7 @@ upload_file env name size contents contentType info man = do
 upload_part
   :: ( HasUploadPartUrl env
      , HasAuthorizationToken env
+     , HasCallStack
      )
   => env
   -> Int64
@@ -806,3 +819,92 @@ autoContentType =
 requestBodyJson :: [Aeson.Pair] -> Http.RequestBody
 requestBodyJson pairs =
   Http.RequestBodyLBS (Aeson.encode (Aeson.object pairs))
+
+streamUpload ::
+  (HasBucketID bucketID) =>
+  -- | Optional chunk size
+  Maybe Int64 ->
+  AuthorizeAccount ->
+  bucketID ->
+  Text ->
+  Http.Manager ->
+  ConduitT ByteString Void (ResourceT IO) File
+streamUpload Nothing env bucketID filename manager =
+  streamUpload (Just (recommendedPartSize env)) env bucketID filename manager
+streamUpload (Just chunkSize) env bucketID filename manager =
+   chunkBySize (fromIntegral chunkSize) -- chunk input stream by chunkSize
+  .| enumerateConduit -- enumerate all chunks starting with 1
+  .| deciderConduit -- invoke single or multi upload
+  where
+    enumerateConduit :: MonadIO m => ConduitT a (Int, a) m ()
+    enumerateConduit = loop 1
+      where
+        loop i = await >>= maybe (return ()) (go i)
+        go i x = do
+          yield (i, x)
+          loop (i + 1)
+    {-# INLINE enumerateConduit #-}
+
+    -- single or multiple parts?
+    deciderConduit :: HasCallStack => ConduitT (Int, ByteString) Void (ResourceT IO) File
+    deciderConduit = do
+      input1 <- await
+      input2 <- await
+      case (input1, input2) of
+        (Nothing, Nothing) -> liftIO $ error "no input"
+        (Just (_, buffer), Nothing) -> do
+          -- retry: if uploading fails, we need to get new upload url
+          liftIO $ retrySimple $ do
+            uploadUrl <- dieW (B2.get_upload_url env bucketID manager)
+            dieW $ B2.upload_file uploadUrl filename (fromIntegral $ BS.length buffer) (yield buffer) Nothing Nothing manager
+        (Just a, Just b) -> do
+          leftover b
+          leftover a
+          multiUploadConduit
+        (Nothing, Just _) -> error "this should never have happen: received EOL before first input"
+
+    multiUploadConduit :: HasCallStack => ConduitT (Int, ByteString) Void (ResourceT IO) File
+    multiUploadConduit = do
+      fileID <- liftIO $ retrySimple $ dieW (start_large_file env bucketID filename Nothing Nothing manager)
+      handleC (handler fileID) $ concurrentMapM_ 3 1 (multiUpload fileID) .| (finishMultiUploadConduit fileID)
+
+    multiUpload :: HasCallStack => LargeFile -> (Int, ByteString) -> (ResourceT IO) LargeFilePart
+    multiUpload fileID (i, buffer) = liftIO $ retrySimple $ do
+      url <- dieW $ B2.get_upload_part_url env fileID manager
+      dieW $ B2.upload_part url (fromIntegral i) (fromIntegral $ BS.length buffer) (yield buffer) manager
+
+    finishMultiUploadConduit :: HasCallStack => LargeFile -> ConduitT LargeFilePart Void (ResourceT IO) File
+    finishMultiUploadConduit fileID = do
+      parts <- sinkList
+      liftIO $ retrySimple $ dieW $ B2.finish_large_file env fileID parts manager
+
+    handler :: (HasCallStack, MonadIO m) => LargeFile -> SomeException -> ConduitT i o m r
+    handler fileID exc = liftIO $ do
+      _ <- dieW $ B2.cancel_large_file env fileID manager
+      putStrLn $ prettyCallStack callStack
+      throwIO exc
+
+retry ::
+  -- | Seconds
+  [Double] ->
+  IO a ->
+  IO a
+retry delaysSeconds io = loop delaysSeconds
+  where
+    loop [] = io
+    loop (delay : delays) = catch io $ \(_ :: SomeException) -> do
+      liftIO $ threadDelay (floor $ delay * 1000 * 1000)
+      loop delays
+
+retrySimple :: IO a -> IO a
+retrySimple =
+  retry [0.0, 0.1, 0.2, 0.3, 0.5, 1]
+
+dieW :: (Exception e) => IO (Either e a) -> IO a
+dieW x = do
+  res <- x
+  either action pure res
+  where
+    action exc = do
+      putStrLn $ prettyCallStack callStack
+      throwIO exc

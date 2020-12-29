@@ -19,12 +19,15 @@ library:
   dependencies:
     - aeson
     - bytestring
+    - conduit-concurrent-map
+    - vector
     - case-insensitive
     - conduit
     - cryptonite
     - http-conduit
     - http-types
     - resourcet
+    - safe-exceptions
     - text
     - unordered-containers
   source-dirs:
@@ -32,7 +35,6 @@ library:
   ghc-options:
     - -funbox-strict-fields
     - -Wall
-    - -Werror
 
 tests:
   spec:
